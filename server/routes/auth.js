@@ -1,0 +1,149 @@
+const express = require('express');
+const router = express.Router();
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const pool = require('../config/db');
+const { google } = require('googleapis');
+
+// Configure the Google OAuth2 client
+const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    'http://localhost:5000/api/auth/google/callback'
+);
+
+// 1. Redirect to Google Login
+router.get('/google', (req, res) => {
+    // 🛠️ Grab the role from the URL (defaults to client if missing)
+    const requestedRole = req.query.role === 'freelancer' ? 'freelancer' : 'client';
+
+    const url = oauth2Client.generateAuthUrl({
+        access_type: 'offline', 
+        prompt: 'consent',
+        scope: [
+            'https://www.googleapis.com/auth/userinfo.profile',
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/calendar.events'
+        ],
+        state: requestedRole // 🌟 Google will hold this and pass it back to us
+    });
+    res.redirect(url);
+});
+
+// 2. Google Callback (Handles the response from Google)
+router.get('/google/callback', async (req, res) => {
+    // 🛠️ Extract both the code AND the state Google sent back
+    const { code, state } = req.query;
+
+    try {
+        // Exchange the code for tokens
+        const { tokens } = await oauth2Client.getToken(code);
+        oauth2Client.setCredentials(tokens);
+
+        const oauth2 = google.oauth2('v2'); 
+        const userInfo = await oauth2.userinfo.get({ auth: oauth2Client });
+
+        const { id: google_id, email, name } = userInfo.data;
+
+        // Check if user exists in DB
+        const [users] = await pool.query('SELECT * FROM users WHERE google_id = ? OR email = ?', [google_id, email]);
+        
+        let user;
+        if (users.length > 0) {
+            user = users[0];
+            // Update the refresh token if we got a new one
+            if (tokens.refresh_token) {
+                await pool.query('UPDATE users SET google_refresh_token = ? WHERE id = ?', [tokens.refresh_token, user.id]);
+            }
+            // Also update google_id if it was missing
+            if (!user.google_id) {
+                await pool.query('UPDATE users SET google_id = ? WHERE id = ?', [google_id, user.id]);
+            }
+        } else {
+            // 🌟 Assign role based on the state parameter instead of hardcoding 'freelancer'
+            const assignedRole = state === 'freelancer' ? 'freelancer' : 'client';
+
+            // Create new user
+            const [result] = await pool.query(
+                'INSERT INTO users (name, email, google_id, google_refresh_token, role) VALUES (?, ?, ?, ?, ?)',
+                [name, email, google_id, tokens.refresh_token, assignedRole]
+            );
+            user = { id: result.insertId, name, email, role: assignedRole };
+        }
+
+        // Generate our app's JWT
+        const appToken = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+        // Redirect back to frontend with the token in the URL
+        res.redirect(`http://localhost:5173/auth?token=${appToken}&user=${JSON.stringify({ id: user.id, name: user.name, role: user.role })}`);
+        
+    } catch (error) {
+        console.error("Detailed Google Auth Error:", error);
+        res.redirect('http://localhost:5173/auth?error=auth_failed');
+    }
+});
+// 1. REGISTER a new user
+router.post('/register', async (req, res) => {
+    const { name, email, password, role } = req.body;
+
+    try {
+        // Check if user already exists
+        const [existingUsers] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+        if (existingUsers.length > 0) {
+            return res.status(400).json({ error: "Email already in use" });
+        }
+
+        // Hash the password for security
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // Insert the new user into the database
+        const [result] = await pool.query(
+            'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)',
+            [name, email, hashedPassword, role]
+        );
+
+        res.status(201).json({ message: "User registered successfully!", userId: result.insertId });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. LOGIN an existing user
+router.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    try {
+        // Find the user by their email
+        const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+        if (users.length === 0) {
+            return res.status(401).json({ error: "Invalid email or password" });
+        }
+
+        const user = users[0];
+
+        // Compare the submitted password with the hashed one in the DB
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            return res.status(401).json({ error: "Invalid email or password" });
+        }
+
+        // Generate a JWT token containing the user's ID and role
+        const token = jwt.sign(
+            { id: user.id, role: user.role }, 
+            process.env.JWT_SECRET, // Make sure this is in your server's .env file!
+            { expiresIn: '1h' }
+        );
+
+        res.json({ 
+            message: "Logged in successfully", 
+            token, 
+            user: { id: user.id, name: user.name, role: user.role } 
+        });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+module.exports = router;
