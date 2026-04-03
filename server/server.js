@@ -11,9 +11,11 @@ app.use('/api/auth', authRoutes);
 
 const availabilityRoutes = require('./routes/availability');
 const bookingRoutes = require('./routes/bookings');
+const userRoutes = require('./routes/users');
 
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/users', userRoutes);
 
 app.get('/api/test', async (req, res) => {
     try {

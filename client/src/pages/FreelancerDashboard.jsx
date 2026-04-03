@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { fetchAvailability, fetchStats, fetchAllBookings, addAvailability, deleteAvailability, cancelBooking } from '../api';
+import { fetchAvailability, fetchStats, fetchAllBookings, addAvailability, createBulkAvailability, deleteAvailability, cancelBooking, toggleAvailability, updateProfile, manualBooking, rejectBooking } from '../api';
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap');
@@ -18,8 +18,10 @@ const CSS = `
 
 /* Sidebar */
 .fd-sidebar {
-  background: #13151a;
-  border-right: 1px solid #2a2e38;
+  background: rgba(19, 21, 26, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(42, 46, 56, 0.5);
   display: flex;
   flex-direction: column;
   padding: 24px 0;
@@ -113,10 +115,12 @@ const CSS = `
   align-items: center;
   justify-content: space-between;
   padding: 18px 28px;
-  border-bottom: 1px solid #2a2e38;
+  border-bottom: 1px solid rgba(42, 46, 56, 0.5);
   position: sticky;
   top: 0;
-  background: #0d0e11;
+  background: rgba(13, 14, 17, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   z-index: 10;
 }
 
@@ -129,17 +133,17 @@ const CSS = `
 .fd-icon-btn {
   width: 34px;
   height: 34px;
-  background: #13151a;
-  border: 1px solid #2a2e38;
+  background: rgba(19, 21, 26, 0.6);
+  border: 1px solid rgba(42, 46, 56, 0.6);
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   position: relative;
-  transition: border-color 0.12s;
+  transition: all 0.2s;
 }
-.fd-icon-btn:hover { border-color: #353a47; }
+.fd-icon-btn:hover { border-color: rgba(108, 143, 255, 0.5); background: rgba(108, 143, 255, 0.1); }
 
 .fd-badge {
   position: absolute;
@@ -241,10 +245,13 @@ const CSS = `
 }
 
 .fd-stat-card {
-  background: #13151a;
-  border: 1px solid #2a2e38;
+  background: rgba(19, 21, 26, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(42, 46, 56, 0.6);
   border-radius: 10px;
   padding: 16px 18px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
 }
 
 .fd-stat-label {
@@ -258,18 +265,23 @@ const CSS = `
 .fd-stat-value {
   font-size: 22px;
   font-weight: 600;
-  color: #e8eaf0;
   font-family: 'DM Mono', monospace;
+  background: linear-gradient(to right, #ffffff, #a0a5b5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .fd-stat-sub { font-size: 11px; margin-top: 5px; }
 
 /* Cards */
 .fd-card {
-  background: #13151a;
-  border: 1px solid #2a2e38;
-  border-radius: 10px;
-  padding: 18px;
+  background: rgba(19, 21, 26, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(42, 46, 56, 0.7);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  border-radius: 12px;
+  padding: 20px;
 }
 
 .fd-card-title {
@@ -348,7 +360,7 @@ const CSS = `
 
 .fd-add-btn {
   padding: 9px 18px;
-  background: #6c8fff;
+  background: linear-gradient(135deg, #6c8fff, #8ba4ff);
   color: #fff;
   border: none;
   border-radius: 7px;
@@ -357,11 +369,12 @@ const CSS = `
   font-family: 'Syne', sans-serif;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.12s, transform 0.1s;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(108,143,255,0.2);
 }
-.fd-add-btn:hover { background: #5a7aef; }
+.fd-add-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(108,143,255,0.3); }
 .fd-add-btn:active { transform: scale(0.97); }
-.fd-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.fd-add-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
 /* Table */
 .fd-table {
@@ -492,6 +505,107 @@ const CSS = `
   color: #3ecf8e;
   margin-bottom: 12px;
 }
+
+/* ── Mobile responsive ─────────────────────────────────────── */
+@media (max-width: 768px) {
+  .fd-root {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+
+  .fd-sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    padding: 0;
+    border-right: none;
+    border-top: 1px solid #2a2e38;
+    z-index: 200;
+    background: #13151a;
+  }
+
+  .fd-logo { display: none; }
+  .fd-user { display: none; }
+
+  .fd-nav {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    padding: 0;
+    gap: 0;
+  }
+
+  .fd-nav-item {
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 6px;
+    font-size: 10px;
+    border-radius: 0;
+    margin-bottom: 0;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+
+  .fd-main {
+    padding-bottom: 60px;
+  }
+
+  .fd-header {
+    padding: 14px 16px;
+  }
+
+  .fd-header-date { display: none; }
+
+  .fd-logout-btn { display: none; }
+
+  .fd-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .fd-form-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .fd-form-grid .fd-add-btn {
+    grid-column: 1 / -1;
+  }
+
+  .fd-page { padding: 16px; }
+
+  /* Overview two-column becomes one-column */
+  div[style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  div[style*="grid-template-columns: 1fr 2fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Week view scrolls horizontally */
+  .fd-week-grid {
+    overflow-x: auto;
+    min-width: 600px;
+  }
+  .fd-card:has(.fd-week-grid) {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .fd-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+  .fd-stat-value { font-size: 18px; }
+  .fd-header-right { gap: 6px; }
+  .fd-avail-toggle { padding: 5px 8px; font-size: 11px; }
+}
 `;
 
 // ─── helpers ───────────────────────────────────────────────
@@ -530,13 +644,24 @@ const FreelancerDashboard = () => {
     const [formMsg, setFormMsg] = useState({ type: '', text: '' });
     const [adding, setAdding] = useState(false);
     const [available, setAvailable] = useState(true);
+    const [togglingAvail, setTogglingAvail] = useState(false);
     const [showNotif, setShowNotif] = useState(false);
     const [bookingFilter, setBookingFilter] = useState('all');
     const [formData, setFormData] = useState({
         booking_date: todayStr,
         start_time: '',
-        end_time: ''
+        end_time: '',
+        session_duration: '30',
+        client_name: '',
+        client_email: ''
     });
+    
+    // New Features state
+    const [copied, setCopied] = useState(false);
+    const [slotMode, setSlotMode] = useState('single');
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [profileForm, setProfileForm] = useState({ title: '', bio: '' });
+    const [savingProfile, setSavingProfile] = useState(false);
 
     const loadData = useCallback(async () => {
         try {
@@ -546,6 +671,10 @@ const FreelancerDashboard = () => {
             ]);
             setSlots(avRes.data || []);
             setStats(stRes.data || null);
+            // Sync the toggle state from DB stats
+            if (stRes.data?.is_taking_bookings !== undefined) {
+                setAvailable(stRes.data.is_taking_bookings);
+            }
         } catch (err) {
             console.error('Load error', err);
         } finally {
@@ -572,13 +701,48 @@ const FreelancerDashboard = () => {
         try {
             const dateObj = new Date(formData.booking_date);
             const dayName = DAYS[dateObj.getDay()];
-            await addAvailability({ ...formData, day_of_week: dayName, freelancer_id: user.id });
-            setFormMsg({ type: 'ok', text: `Slot added for ${dayName}, ${fmtDate(formData.booking_date)} and synced to Google Calendar!` });
+            
+            if (slotMode === 'bulk') {
+                const res = await createBulkAvailability({ ...formData, day_of_week: dayName, freelancer_id: user.id });
+                setFormMsg({ type: 'ok', text: res.data.message });
+            } else if (slotMode === 'manual') {
+                if (!formData.client_name || !formData.client_email) {
+                    setFormMsg({ type: 'err', text: 'Client Name and Email are required for manual booking.' });
+                    setAdding(false);
+                    return;
+                }
+                const res = await manualBooking({ ...formData, day_of_week: dayName, freelancer_id: user.id });
+                setFormMsg({ type: 'ok', text: res.data.message });
+            } else {
+                await addAvailability({ ...formData, day_of_week: dayName, freelancer_id: user.id });
+                setFormMsg({ type: 'ok', text: `Slot added for ${dayName}, ${fmtDate(formData.booking_date)} and synced to Google Calendar!` });
+            }
             await loadData();
         } catch (err) {
-            setFormMsg({ type: 'err', text: err.response?.data?.error || 'Failed to add slot.' });
+            setFormMsg({ type: 'err', text: err.response?.data?.error || 'Failed to add slot(s).' });
         } finally {
             setAdding(false);
+        }
+    };
+
+    const handleCopyLink = () => {
+        const url = `${window.location.origin}/book/${user.id}`;
+        navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleSaveProfile = async (e) => {
+        e.preventDefault();
+        setSavingProfile(true);
+        try {
+            await updateProfile(profileForm);
+            alert('Profile updated securely.');
+            setShowProfileModal(false);
+        } catch (err) {
+            alert('Failed to update profile.');
+        } finally {
+            setSavingProfile(false);
         }
     };
 
@@ -589,6 +753,33 @@ const FreelancerDashboard = () => {
             await loadData();
         } catch {
             alert('Failed to delete slot.');
+        }
+    };
+
+    const handleReject = async (id, clientName) => {
+        const reason = window.prompt(`Why are you rejecting the booking with ${clientName || 'this client'}? (This will be emailed to them)`);
+        if (reason === null) return; // User cancelled prompt
+        if (!reason.trim()) { alert('A reason is required to reject a booking.'); return; }
+        
+        try {
+            await rejectBooking(id, { reason });
+            alert('Booking rejected successfully. Email sent.');
+            await loadData();
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to reject booking.');
+        }
+    };
+
+    const handleToggleAvailable = async () => {
+        if (togglingAvail) return;
+        setTogglingAvail(true);
+        try {
+            const { data } = await toggleAvailability();
+            setAvailable(!!data.is_taking_bookings);
+        } catch {
+            alert('Failed to update availability. Please try again.');
+        } finally {
+            setTogglingAvail(false);
         }
     };
 
@@ -657,10 +848,13 @@ const FreelancerDashboard = () => {
                             <div className="fd-avatar">{initials(user.name)}</div>
                             <div>
                                 <div className="fd-user-name">{user.name}</div>
-                                <div className="fd-user-status">
+                                <div className="fd-user-status" style={{ marginBottom: 8 }}>
                                     <span className="fd-status-dot" style={{ background: available ? '#3ecf8e' : '#555b6e' }} />
                                     {available ? 'Available' : 'Busy'}
                                 </div>
+                                <button className="fd-del-btn" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => setShowProfileModal(true)}>
+                                    Edit Profile
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -675,13 +869,16 @@ const FreelancerDashboard = () => {
                             <div className="fd-header-date">{today.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
                         </div>
                         <div className="fd-header-right">
+                            <button className="fd-avail-toggle" style={{ background: copied ? 'rgba(62,207,142,0.1)' : 'transparent', color: copied ? '#3ecf8e' : '#e8eaf0' }} onClick={handleCopyLink}>
+                                {copied ? '✓ Copied' : '📋 Copy my link'}
+                            </button>
                             <div className="fd-icon-btn" onClick={() => setShowNotif(!showNotif)}>
                                 <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 1.5C5 1.5 3 3.5 3 6v3L1.5 11h12L12 9V6C12 3.5 10 1.5 7.5 1.5z" stroke="#8b90a0" strokeWidth="1.2"/><line x1="7.5" y1="13.5" x2="7.5" y2="11" stroke="#8b90a0" strokeWidth="1.2" strokeLinecap="round"/></svg>
                                 {notifCount > 0 && <div className="fd-badge">{notifCount}</div>}
                             </div>
-                            <div className="fd-avail-toggle" onClick={() => setAvailable(!available)}>
+                            <div className="fd-avail-toggle" onClick={handleToggleAvailable} style={{ opacity: togglingAvail ? 0.6 : 1 }}>
                                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: available ? '#3ecf8e' : '#555b6e', display: 'inline-block' }} />
-                                {available ? 'Available' : 'Busy'}
+                                {togglingAvail ? 'Saving...' : available ? 'Available' : 'Busy'}
                             </div>
                             <button className="fd-logout-btn" onClick={() => { localStorage.clear(); window.location.href = '/auth'; }}>
                                 Logout
@@ -827,6 +1024,48 @@ const FreelancerDashboard = () => {
                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* ── Server stats: Week hours + Monthly bookings ── */}
+                                    {stats && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, marginTop: 2 }}>
+                                            {/* Week hours card */}
+                                            <div className="fd-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                <div className="fd-card-title">This week</div>
+                                                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 32, fontWeight: 700, color: '#6c8fff' }}>
+                                                    {stats.weekHours || 0}
+                                                    <span style={{ fontSize: 14, color: '#555b6e', marginLeft: 6 }}>hrs</span>
+                                                </div>
+                                                <div style={{ fontSize: 12, color: '#8b90a0' }}>scheduled this week</div>
+                                                <div style={{ marginTop: 8, fontSize: 12, color: '#555b6e' }}>
+                                                    <span style={{ color: '#e8eaf0', fontWeight: 500 }}>
+                                                        {stats.monthStats?.this_month_booked || 0}
+                                                    </span> booked this month
+                                                </div>
+                                            </div>
+
+                                            {/* Monthly bookings bar chart */}
+                                            <div className="fd-card">
+                                                <div className="fd-card-title">Monthly bookings — {new Date().getFullYear()}</div>
+                                                {(!stats.monthlyBookings || stats.monthlyBookings.length === 0) ? (
+                                                    <div className="fd-empty">No booking history yet</div>
+                                                ) : (() => {
+                                                    const maxCount = Math.max(...stats.monthlyBookings.map(m => m.booking_count));
+                                                    return stats.monthlyBookings.map(m => (
+                                                        <div key={m.month} className="fd-progress-row">
+                                                            <div className="fd-progress-label">{m.month_name?.substring(0,3)}</div>
+                                                            <div className="fd-progress-bar">
+                                                                <div className="fd-progress-fill" style={{
+                                                                    width: `${Math.round((m.booking_count / maxCount) * 100)}%`,
+                                                                    background: 'linear-gradient(90deg, #6c8fff, #a78bfa)'
+                                                                }} />
+                                                            </div>
+                                                            <div className="fd-progress-val">{m.booking_count}</div>
+                                                        </div>
+                                                    ));
+                                                })()}
+                                            </div>
+                                        </div>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -936,7 +1175,11 @@ const FreelancerDashboard = () => {
                                                             </span>
                                                         </td>
                                                         <td>
-                                                            <button className="fd-del-btn" onClick={() => handleDelete(s.id)}>Remove</button>
+                                                            {s.is_booked ? (
+                                                                <button className="fd-del-btn" style={{color: '#f06060', borderColor: 'rgba(240, 96, 96, 0.2)', background: 'rgba(240, 96, 96, 0.05)'}} onClick={() => handleReject(s.id, s.client_name)}>Reject</button>
+                                                            ) : (
+                                                                <button className="fd-del-btn" onClick={() => handleDelete(s.id)}>Remove</button>
+                                                            )}
                                                         </td>
                                                     </tr>
                                                 );
@@ -953,30 +1196,66 @@ const FreelancerDashboard = () => {
                         <div className="fd-page">
                             <div className="fd-card" style={{ marginBottom: 20 }}>
                                 <div className="fd-card-title">Add availability slot</div>
+                                <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+                                    <label style={{ fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <input type="radio" checked={slotMode === 'single'} onChange={() => setSlotMode('single')} /> Single Slot
+                                    </label>
+                                    <label style={{ fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <input type="radio" checked={slotMode === 'bulk'} onChange={() => setSlotMode('bulk')} /> Bulk Generate
+                                    </label>
+                                    <label style={{ fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <input type="radio" checked={slotMode === 'manual'} onChange={() => setSlotMode('manual')} /> Manual Book
+                                    </label>
+                                </div>
                                 {formMsg.text && (
                                     <div className={formMsg.type === 'err' ? 'fd-inline-err' : 'fd-inline-ok'}>
                                         {formMsg.text}
                                     </div>
                                 )}
                                 <form onSubmit={handleAddSlot}>
-                                    <div className="fd-form-grid">
+                                    <div className="fd-form-grid" style={{ gridTemplateColumns: slotMode === 'manual' ? '1fr 1fr' : (slotMode === 'bulk' ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr') }}>
                                         <div className="fd-field">
                                             <label>Date</label>
                                             <input type="date" required value={formData.booking_date}
                                                 onChange={e => setFormData({ ...formData, booking_date: e.target.value })} />
                                         </div>
                                         <div className="fd-field">
-                                            <label>Start time</label>
+                                            <label>{slotMode === 'bulk' ? 'Start Range' : 'Start time'}</label>
                                             <input type="time" required value={formData.start_time}
                                                 onChange={e => setFormData({ ...formData, start_time: e.target.value })} />
                                         </div>
                                         <div className="fd-field">
-                                            <label>End time</label>
+                                            <label>{slotMode === 'bulk' ? 'End Range' : 'End time'}</label>
                                             <input type="time" required value={formData.end_time}
                                                 onChange={e => setFormData({ ...formData, end_time: e.target.value })} />
                                         </div>
-                                        <button className="fd-add-btn" type="submit" disabled={adding}>
-                                            {adding ? 'Saving...' : '+ Add & Sync'}
+                                        {slotMode === 'bulk' && (
+                                            <div className="fd-field">
+                                                <label>Duration (mins)</label>
+                                                <select value={formData.session_duration} onChange={e => setFormData({ ...formData, session_duration: e.target.value })}>
+                                                    <option value="15">15 min</option>
+                                                    <option value="30">30 min</option>
+                                                    <option value="45">45 min</option>
+                                                    <option value="60">60 min</option>
+                                                    <option value="90">90 min</option>
+                                                    <option value="120">120 min</option>
+                                                </select>
+                                            </div>
+                                        )}
+                                        {slotMode === 'manual' && (
+                                            <>
+                                                <div className="fd-field">
+                                                    <label>Client Name</label>
+                                                    <input type="text" required value={formData.client_name} onChange={e => setFormData({...formData, client_name: e.target.value})} placeholder="John Doe" />
+                                                </div>
+                                                <div className="fd-field">
+                                                    <label>Client Email</label>
+                                                    <input type="email" required value={formData.client_email} onChange={e => setFormData({...formData, client_email: e.target.value})} placeholder="john@example.com" />
+                                                </div>
+                                            </>
+                                        )}
+                                        <button className="fd-add-btn" type="submit" disabled={adding} style={{ gridColumn: '1 / -1' }}>
+                                            {adding ? 'Saving...' : (slotMode === 'bulk' ? '⚡ Generate Slots' : slotMode === 'manual' ? '📅 Book Client Now' : '+ Add & Sync')}
                                         </button>
                                     </div>
                                 </form>
@@ -1002,7 +1281,13 @@ const FreelancerDashboard = () => {
                                                             {conflictIds.has(s.id) ? 'CONFLICT' : s.is_booked ? 'BOOKED' : 'OPEN'}
                                                         </span>
                                                     </td>
-                                                    <td><button className="fd-del-btn" onClick={() => handleDelete(s.id)}>Remove</button></td>
+                                                    <td>
+                                                        {s.is_booked ? (
+                                                            <button className="fd-del-btn" style={{color: '#f06060', borderColor: 'rgba(240, 96, 96, 0.2)', background: 'rgba(240, 96, 96, 0.05)'}} onClick={() => handleReject(s.id, s.client_name)}>Reject</button>
+                                                        ) : (
+                                                            <button className="fd-del-btn" onClick={() => handleDelete(s.id)}>Remove</button>
+                                                        )}
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -1013,6 +1298,34 @@ const FreelancerDashboard = () => {
                     )}
                 </div>
             </div>
+
+            {/* Profile Modal */}
+            {showProfileModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+                    <div className="fd-card" style={{ width: '100%', maxWidth: 400, margin: 20 }}>
+                        <div className="fd-card-title">Edit Public Profile</div>
+                        <div style={{ fontSize: 13, color: '#8b90a0', marginBottom: 20 }}>
+                            These details will appear on your public booking page.
+                        </div>
+                        <form onSubmit={handleSaveProfile}>
+                            <div className="fd-field">
+                                <label>Job Title / Headline</label>
+                                <input type="text" placeholder="e.g. Senior UX Designer" value={profileForm.title} onChange={e => setProfileForm({...profileForm, title: e.target.value})} />
+                            </div>
+                            <div className="fd-field">
+                                <label>Bio</label>
+                                <textarea rows="4" placeholder="Tell clients a bit about yourself..." style={{ width: '100%', padding: '10px 12px', background: 'var(--c-surface)', border: '1px solid var(--c-border)', borderRadius: 8, color: 'var(--c-text)', fontSize: 13, fontFamily: "'Syne', sans-serif" }} value={profileForm.bio} onChange={e => setProfileForm({...profileForm, bio: e.target.value})} />
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                                <button type="button" className="fd-del-btn" style={{ flex: 1 }} onClick={() => setShowProfileModal(false)}>Cancel</button>
+                                <button type="submit" className="fd-add-btn" style={{ flex: 1, margin: 0 }} disabled={savingProfile}>
+                                    {savingProfile ? 'Saving...' : 'Save Profile'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </>
     );
 };

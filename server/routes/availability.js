@@ -77,11 +77,15 @@ router.get('/stats/:freelancerId', auth, async (req, res) => {
             [freelancerId]
         );
 
+        // Fetch freelancer's taking-bookings status
+        const [userRow] = await pool.query('SELECT is_taking_bookings FROM users WHERE id = ?', [freelancerId]);
+
         res.json({
             monthStats: monthStats[0],
             monthlyBookings,
             conflicts,
-            weekHours: weekStats[0]?.week_hours || 0
+            weekHours: weekStats[0]?.week_hours || 0,
+            is_taking_bookings: userRow[0]?.is_taking_bookings ?? true
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -125,14 +129,14 @@ router.post('/', auth, async (req, res) => {
             const oauth2Client = new google.auth.OAuth2(
                 process.env.GOOGLE_CLIENT_ID,
                 process.env.GOOGLE_CLIENT_SECRET,
-                'http://localhost:5000/api/auth/google/callback'
+                process.env.GOOGLE_REDIRECT_URI
             );
             oauth2Client.setCredentials({ refresh_token: refreshToken });
             const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
             const fmt = (t) => { const s = t.trim(); return s.split(':').length === 2 ? `${s}:00` : s; };
 
-            await calendar.events.insert({
+            const calEvent = await calendar.events.insert({
                 calendarId: 'primary',
                 resource: {
                     summary: `Available: ${day_of_week}`,
@@ -141,6 +145,9 @@ router.post('/', auth, async (req, res) => {
                     end: { dateTime: `${booking_date}T${fmt(end_time)}`, timeZone: 'Asia/Kolkata' },
                 },
             });
+            // Store the Google Calendar event ID for later deletion
+            const googleEventId = calEvent.data.id;
+            await pool.query('UPDATE availability SET google_event_id = ? WHERE id = ?', [googleEventId, result.insertId]);
         }
 
         res.status(201).json({ message: "Availability saved and synced!", id: result.insertId });
@@ -154,12 +161,98 @@ router.post('/', auth, async (req, res) => {
 // 4. DELETE: Remove a slot (Protected)
 router.delete('/:id', auth, async (req, res) => {
     try {
-        const [result] = await pool.query(
-            'DELETE FROM availability WHERE id = ? AND freelancer_id = ?',
+        // Fetch slot first to get google_event_id and verify ownership
+        const [slots] = await pool.query(
+            'SELECT a.*, u.google_refresh_token FROM availability a JOIN users u ON u.id = a.freelancer_id WHERE a.id = ? AND a.freelancer_id = ?',
             [req.params.id, req.user.id]
         );
-        if (result.affectedRows === 0) return res.status(404).json({ error: "Slot not found or unauthorized" });
-        res.json({ message: "Slot deleted" });
+        if (slots.length === 0) return res.status(404).json({ error: 'Slot not found or unauthorized' });
+
+        const slot = slots[0];
+
+        // Delete from Google Calendar if we have the event ID
+        if (slot.google_event_id && slot.google_refresh_token) {
+            try {
+                const oauth2Client = new google.auth.OAuth2(
+                    process.env.GOOGLE_CLIENT_ID,
+                    process.env.GOOGLE_CLIENT_SECRET,
+                    process.env.GOOGLE_REDIRECT_URI
+                );
+                oauth2Client.setCredentials({ refresh_token: slot.google_refresh_token });
+                const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+                await calendar.events.delete({ calendarId: 'primary', eventId: slot.google_event_id });
+            } catch (calErr) {
+                console.warn('Google Calendar delete failed (continuing):', calErr.message);
+            }
+        }
+
+        await pool.query('DELETE FROM availability WHERE id = ? AND freelancer_id = ?', [req.params.id, req.user.id]);
+        res.json({ message: 'Slot deleted and removed from Google Calendar' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST: Add multiple availability slots at once
+router.post('/bulk', auth, async (req, res) => {
+    try {
+        const { booking_date, start_time, end_time, session_duration } = req.body;
+        if (!booking_date || !start_time || !end_time || !session_duration) {
+            return res.status(400).json({ error: "Missing required fields." });
+        }
+
+        const parseTime = (t) => {
+            const [h, m] = t.split(':').map(Number);
+            return h * 60 + m;
+        };
+
+        const startMins = parseTime(start_time);
+        const endMins = parseTime(end_time);
+
+        if (startMins >= endMins) {
+            return res.status(400).json({ error: "End time must be after start time." });
+        }
+
+        const duration = parseInt(session_duration, 10);
+        if (duration <= 0) return res.status(400).json({ error: "Invalid duration." });
+
+        const slots = [];
+        let currentStart = startMins;
+
+        const formatTime = (mins) => {
+            const h = Math.floor(mins / 60).toString().padStart(2, '0');
+            const m = (mins % 60).toString().padStart(2, '0');
+            return `${h}:${m}:00`;
+        };
+
+        // We will insert basic local slots only (no auto-GCal sync for bulk to avoid rate limits initially).
+        // Users can add bulk slots quickly here.
+        while (currentStart + duration <= endMins) {
+            const currentEnd = currentStart + duration;
+            const dt = new Date(booking_date);
+            const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+            const dayName = days[dt.getDay()];
+            
+            slots.push([
+                req.user.id,
+                booking_date,
+                dayName,
+                formatTime(currentStart),
+                formatTime(currentEnd)
+            ]);
+            currentStart = currentEnd;
+        }
+
+        if (slots.length === 0) {
+            return res.status(400).json({ error: "Time range is too short for a single session." });
+        }
+
+        const [result] = await pool.query(
+            'INSERT INTO availability (freelancer_id, booking_date, day_of_week, start_time, end_time) VALUES ?',
+            [slots]
+        );
+
+        res.status(201).json({ message: `Successfully created ${result.affectedRows} slots.` });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

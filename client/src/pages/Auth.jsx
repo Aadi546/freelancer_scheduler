@@ -9,7 +9,7 @@ const styles = `
   
   .auth-root {
     min-height: 100vh;
-    background: #0d0e11;
+    background: radial-gradient(circle at 10% 20%, rgba(108,143,255,0.15) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(167,139,250,0.15) 0%, transparent 40%), #0d0e11;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -19,18 +19,21 @@ const styles = `
   
   .auth-card {
     width: 100%;
-    max-width: 400px;
-    background: #13151a;
-    border: 1px solid #2a2e38;
-    border-radius: 16px;
-    padding: 36px;
+    max-width: 420px;
+    background: rgba(19, 21, 26, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(42, 46, 56, 0.6);
+    box-shadow: 0 24px 64px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05) inset;
+    border-radius: 20px;
+    padding: 40px;
   }
   
   .auth-logo {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 32px;
+    gap: 12px;
+    margin-bottom: 36px;
   }
   
   .auth-logo-icon {
@@ -104,50 +107,55 @@ const styles = `
   
   .field-input {
     width: 100%;
-    padding: 10px 12px;
-    background: #1a1d24;
-    border: 1px solid #2a2e38;
-    border-radius: 8px;
+    padding: 12px 14px;
+    background: rgba(26, 29, 36, 0.6);
+    border: 1px solid rgba(42, 46, 56, 0.8);
+    border-radius: 10px;
     color: #e8eaf0;
     font-size: 14px;
     font-family: 'Syne', sans-serif;
     outline: none;
-    transition: border-color 0.15s;
+    transition: all 0.2s;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
   }
   
-  .field-input:focus { border-color: #6c8fff; }
-  .field-input::placeholder { color: #3a3f4d; }
+  .field-input:focus { border-color: #6c8fff; background: rgba(26, 29, 36, 0.9); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1), 0 0 0 3px rgba(108,143,255,0.15); }
+  .field-input::placeholder { color: #555b6e; }
   
   .field-select {
     width: 100%;
-    padding: 10px 12px;
-    background: #1a1d24;
-    border: 1px solid #2a2e38;
-    border-radius: 8px;
+    padding: 12px 14px;
+    background: rgba(26, 29, 36, 0.6);
+    border: 1px solid rgba(42, 46, 56, 0.8);
+    border-radius: 10px;
     color: #e8eaf0;
     font-size: 14px;
     font-family: 'Syne', sans-serif;
     outline: none;
     cursor: pointer;
     appearance: none;
+    transition: all 0.2s;
   }
+  
+  .field-select:focus { border-color: #6c8fff; box-shadow: 0 0 0 3px rgba(108,143,255,0.15); }
   
   .submit-btn {
     width: 100%;
-    padding: 11px;
-    background: #6c8fff;
+    padding: 14px;
+    background: linear-gradient(135deg, #6c8fff, #8ba4ff);
     color: #fff;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 14px;
     font-weight: 600;
     font-family: 'Syne', sans-serif;
     cursor: pointer;
-    margin-top: 6px;
-    transition: background 0.15s, transform 0.1s;
+    margin-top: 12px;
+    transition: all 0.2s;
+    box-shadow: 0 4px 16px rgba(108,143,255,0.25);
   }
   
-  .submit-btn:hover { background: #5a7aef; }
+  .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(108,143,255,0.35); }
   .submit-btn:active { transform: scale(0.98); }
   
   .divider {
@@ -227,7 +235,7 @@ const Auth = () => {
                 localStorage.setItem('token', token);
                 localStorage.setItem('user', userJson);
                 const user = JSON.parse(userJson);
-                navigate(user.role === 'freelancer' ? '/freelancer' : '/');
+                navigate(user.role === 'freelancer' ? '/freelancer' : '/client');
             } catch {
                 setError('Failed to process login. Please try again.');
             }
@@ -244,7 +252,7 @@ const Auth = () => {
                 const { data } = await loginUser({ email: formData.email, password: formData.password });
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('user', JSON.stringify(data.user));
-                navigate(data.user.role === 'freelancer' ? '/freelancer' : `/book/${data.user.id}`);
+                navigate(data.user.role === 'freelancer' ? '/freelancer' : '/client');
             } else {
                 await registerUser(formData);
                 setSuccess('Account created! Please log in.');
