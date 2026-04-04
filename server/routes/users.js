@@ -9,14 +9,12 @@ router.patch('/availability-toggle', auth, async (req, res) => {
         if (req.user.role !== 'freelancer') {
             return res.status(403).json({ error: 'Only freelancers can toggle availability.' });
         }
-        // Flip the current value
         const [result] = await pool.query(
             'UPDATE users SET is_taking_bookings = NOT is_taking_bookings WHERE id = ?',
             [req.user.id]
         );
         if (result.affectedRows === 0) return res.status(404).json({ error: 'User not found.' });
 
-        // Return the new value
         const [rows] = await pool.query('SELECT is_taking_bookings FROM users WHERE id = ?', [req.user.id]);
         res.json({ is_taking_bookings: rows[0].is_taking_bookings });
     } catch (error) {
@@ -24,10 +22,13 @@ router.patch('/availability-toggle', auth, async (req, res) => {
     }
 });
 
-// GET: Get freelancer's public profile (Public - for booking page)
+// GET: Get public profile (freelancer directory or booking page)
 router.get('/:id/profile', async (req, res) => {
     try {
-        const [rows] = await pool.query('SELECT name, title, bio, is_taking_bookings FROM users WHERE id = ?', [req.params.id]);
+        const [rows] = await pool.query(
+            'SELECT name, title, bio, is_taking_bookings, avatar_url, company_name, skills, hourly_rate FROM users WHERE id = ?', 
+            [req.params.id]
+        );
         if (rows.length === 0) return res.status(404).json({ error: 'User not found.' });
         res.json(rows[0]);
     } catch (error) {
@@ -35,18 +36,53 @@ router.get('/:id/profile', async (req, res) => {
     }
 });
 
-// PATCH: Update freelancer profile (title, bio)
+// GET: Fetch current user profile details
+router.get('/me', auth, async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            'SELECT id, name, email, role, title, bio, avatar_url, company_name, skills, theme_preference, hourly_rate, is_taking_bookings FROM users WHERE id = ?',
+            [req.user.id]
+        );
+        if (rows.length === 0) return res.status(404).json({ error: 'Profile not found.' });
+        res.json(rows[0]);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// PATCH: Update user profile (freelancer & client fields)
 router.patch('/profile', auth, async (req, res) => {
     try {
-        if (req.user.role !== 'freelancer') {
-            return res.status(403).json({ error: 'Only freelancers can update profiles.' });
+        const fields = [];
+        const values = [];
+        const allowedFields = ['title', 'bio', 'avatar_url', 'company_name', 'theme_preference'];
+        
+        allowedFields.forEach(field => {
+            if (req.body[field] !== undefined) {
+                fields.push(`${field} = ?`);
+                values.push(req.body[field]);
+            }
+        });
+
+        if (req.body.skills !== undefined) {
+            fields.push(`skills = ?`);
+            values.push(JSON.stringify(req.body.skills));
         }
-        const { title, bio } = req.body;
+
+        if (req.body.hourly_rate !== undefined && req.user.role === 'freelancer') {
+            fields.push(`hourly_rate = ?`);
+            values.push(req.body.hourly_rate);
+        }
+
+        if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+        values.push(req.user.id);
+        
         await pool.query(
-            'UPDATE users SET title = ?, bio = ? WHERE id = ?',
-            [title || null, bio || null, req.user.id]
+            `UPDATE users SET ${fields.join(', ')} WHERE id = ?`,
+            values
         );
-        res.json({ message: 'Profile updated' });
+        res.json({ message: 'Profile updated successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -59,9 +95,8 @@ router.get('/client/my-freelancers', auth, async (req, res) => {
         const [users] = await pool.query('SELECT email FROM users WHERE id = ?', [req.user.id]);
         const clientEmail = users[0].email;
 
-        // Find distinct freelancers this client has booked with
         const [rows] = await pool.query(`
-            SELECT DISTINCT u.id, u.name, u.title, u.bio
+            SELECT DISTINCT u.id, u.name, u.title, u.bio, u.avatar_url, u.skills, u.hourly_rate
             FROM availability a
             JOIN users u ON a.freelancer_id = u.id
             WHERE a.client_email = ? 
@@ -78,9 +113,9 @@ router.get('/client/my-freelancers', auth, async (req, res) => {
 router.get('/directory', async (req, res) => {
     try {
         const [rows] = await pool.query(`
-            SELECT id, name, title, bio 
+            SELECT id, name, title, bio, avatar_url, skills, hourly_rate
             FROM users 
-            WHERE role = 'freelancer'
+            WHERE role = 'freelancer' AND is_taking_bookings = TRUE
         `);
         res.json(rows);
     } catch (error) {

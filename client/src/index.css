@@ -1,0 +1,54 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap');
+
+@theme {
+  --color-dark-950: #0d0e11;
+  --color-dark-900: #13151a;
+  --color-dark-800: #1a1d24;
+  --color-dark-700: #21252e;
+  --color-dark-600: #2a2e38;
+  --color-dark-500: #353a47;
+  
+  --color-accent-500: #6c8fff;
+  --color-accent-600: #5a7be0;
+  
+  --font-syne: "Syne", sans-serif;
+  --font-mono: "DM Mono", monospace;
+  
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-dark-950 text-slate-200 font-syne antialiased;
+  min-height: 100vh;
+}
+
+/* Glassmorphism utility */
+@utility glass {
+  @apply bg-dark-900/40 backdrop-blur-xl border border-dark-600/50;
+}
+
+.glass-card {
+  @apply glass rounded-2xl shadow-2xl;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-dark-950;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-dark-600 rounded-full hover:bg-dark-500 transition-colors;
+}
+
+/* Transitions */
+.transition-standard {
+  @apply transition-all duration-200 ease-out;
+}

@@ -2,213 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginUser, registerUser } from '../api';
 
-const styles = `
-  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap');
-  
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  
-  .auth-root {
-    min-height: 100vh;
-    background: radial-gradient(circle at 10% 20%, rgba(108,143,255,0.15) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(167,139,250,0.15) 0%, transparent 40%), #0d0e11;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Syne', sans-serif;
-    padding: 20px;
-  }
-  
-  .auth-card {
-    width: 100%;
-    max-width: 420px;
-    background: rgba(19, 21, 26, 0.6);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(42, 46, 56, 0.6);
-    box-shadow: 0 24px 64px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05) inset;
-    border-radius: 20px;
-    padding: 40px;
-  }
-  
-  .auth-logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 36px;
-  }
-  
-  .auth-logo-icon {
-    width: 32px;
-    height: 32px;
-    background: #6c8fff;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .auth-logo-text {
-    font-size: 17px;
-    font-weight: 600;
-    color: #e8eaf0;
-  }
-  
-  .auth-title {
-    font-size: 22px;
-    font-weight: 600;
-    color: #e8eaf0;
-    margin-bottom: 6px;
-  }
-  
-  .auth-subtitle {
-    font-size: 13px;
-    color: #555b6e;
-    margin-bottom: 28px;
-  }
-  
-  .auth-tabs {
-    display: flex;
-    background: #1a1d24;
-    border-radius: 8px;
-    padding: 3px;
-    margin-bottom: 24px;
-  }
-  
-  .auth-tab {
-    flex: 1;
-    padding: 8px;
-    border: none;
-    background: transparent;
-    border-radius: 6px;
-    font-size: 13px;
-    font-family: 'Syne', sans-serif;
-    font-weight: 500;
-    cursor: pointer;
-    color: #555b6e;
-    transition: all 0.15s;
-  }
-  
-  .auth-tab.active {
-    background: #21252e;
-    color: #e8eaf0;
-  }
-  
-  .field-group {
-    margin-bottom: 14px;
-  }
-  
-  .field-label {
-    display: block;
-    font-size: 12px;
-    color: #8b90a0;
-    margin-bottom: 6px;
-    font-weight: 500;
-    letter-spacing: 0.3px;
-  }
-  
-  .field-input {
-    width: 100%;
-    padding: 12px 14px;
-    background: rgba(26, 29, 36, 0.6);
-    border: 1px solid rgba(42, 46, 56, 0.8);
-    border-radius: 10px;
-    color: #e8eaf0;
-    font-size: 14px;
-    font-family: 'Syne', sans-serif;
-    outline: none;
-    transition: all 0.2s;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-  }
-  
-  .field-input:focus { border-color: #6c8fff; background: rgba(26, 29, 36, 0.9); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1), 0 0 0 3px rgba(108,143,255,0.15); }
-  .field-input::placeholder { color: #555b6e; }
-  
-  .field-select {
-    width: 100%;
-    padding: 12px 14px;
-    background: rgba(26, 29, 36, 0.6);
-    border: 1px solid rgba(42, 46, 56, 0.8);
-    border-radius: 10px;
-    color: #e8eaf0;
-    font-size: 14px;
-    font-family: 'Syne', sans-serif;
-    outline: none;
-    cursor: pointer;
-    appearance: none;
-    transition: all 0.2s;
-  }
-  
-  .field-select:focus { border-color: #6c8fff; box-shadow: 0 0 0 3px rgba(108,143,255,0.15); }
-  
-  .submit-btn {
-    width: 100%;
-    padding: 14px;
-    background: linear-gradient(135deg, #6c8fff, #8ba4ff);
-    color: #fff;
-    border: none;
-    border-radius: 10px;
-    font-size: 14px;
-    font-weight: 600;
-    font-family: 'Syne', sans-serif;
-    cursor: pointer;
-    margin-top: 12px;
-    transition: all 0.2s;
-    box-shadow: 0 4px 16px rgba(108,143,255,0.25);
-  }
-  
-  .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(108,143,255,0.35); }
-  .submit-btn:active { transform: scale(0.98); }
-  
-  .divider {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 20px 0;
-  }
-  
-  .divider-line { flex: 1; height: 1px; background: #2a2e38; }
-  .divider-text { font-size: 12px; color: #555b6e; }
-  
-  .google-btn {
-    width: 100%;
-    padding: 10px;
-    background: #1a1d24;
-    border: 1px solid #2a2e38;
-    border-radius: 8px;
-    color: #e8eaf0;
-    font-size: 13px;
-    font-weight: 500;
-    font-family: 'Syne', sans-serif;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    transition: border-color 0.15s, background 0.15s;
-  }
-  
-  .google-btn:hover { background: #21252e; border-color: #353a47; }
-  
-  .error-msg {
-    background: rgba(240,96,96,0.1);
-    border: 1px solid rgba(240,96,96,0.25);
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 12px;
-    color: #f06060;
-    margin-bottom: 14px;
-  }
-  
-  .success-msg {
-    background: rgba(62,207,142,0.1);
-    border: 1px solid rgba(62,207,142,0.25);
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 12px;
-    color: #3ecf8e;
-    margin-bottom: 14px;
-  }
-`;
-
 const Auth = () => {
     const navigate = useNavigate();
     const [isLogin, setIsLogin] = useState(true);
@@ -270,109 +63,129 @@ const Auth = () => {
     };
 
     return (
-        <>
-            <style>{styles}</style>
-            <div className="auth-root">
-                <div className="auth-card">
-                    <div className="auth-logo">
-                        <div className="auth-logo-icon">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                <rect x="1" y="1" width="6" height="6" rx="1.5" fill="white"/>
-                                <rect x="9" y="1" width="6" height="6" rx="1.5" fill="white" opacity="0.6"/>
-                                <rect x="1" y="9" width="6" height="6" rx="1.5" fill="white" opacity="0.6"/>
-                                <rect x="9" y="9" width="6" height="6" rx="1.5" fill="white"/>
-                            </svg>
-                        </div>
-                        <span className="auth-logo-text">FreelanceOS</span>
+        <div className="min-header-screen flex items-center justify-center p-6 bg-dark-950 relative overflow-hidden">
+            {/* Background Decorative Gradients */}
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-accent-500/10 blur-[120px] rounded-full pointer-events-none" />
+            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-violet-500/10 blur-[120px] rounded-full pointer-events-none" />
+
+            <div className="w-full max-w-md glass-card p-10 relative z-10 transition-standard">
+                <div className="flex items-center gap-3 mb-10">
+                    <div className="w-9 h-9 bg-accent-500 rounded-lg flex items-center justify-center shadow-lg shadow-accent-500/20">
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                            <rect x="1" y="1" width="6" height="6" rx="1.5" fill="white"/>
+                            <rect x="9" y="1" width="6" height="6" rx="1.5" fill="white" opacity="0.6"/>
+                            <rect x="1" y="9" width="6" height="6" rx="1.5" fill="white" opacity="0.6"/>
+                            <rect x="9" y="9" width="6" height="6" rx="1.5" fill="white"/>
+                        </svg>
                     </div>
+                    <span className="text-xl font-bold tracking-tight text-white">FreelanceOS</span>
+                </div>
 
-                    <div className="auth-title">{isLogin ? 'Welcome back' : 'Create account'}</div>
-                    <div className="auth-subtitle">
-                        {isLogin ? 'Sign in to your workspace' : 'Get started with FreelanceOS'}
-                    </div>
+                <div className="mb-8">
+                    <h2 className="text-2xl font-bold text-white mb-2">{isLogin ? 'Welcome back' : 'Create account'}</h2>
+                    <p className="text-sm text-slate-400">
+                        {isLogin ? 'Sign in to your dashboard' : 'Get started with FreelanceOS today'}
+                    </p>
+                </div>
 
-                    <div className="auth-tabs">
-                        <button className={`auth-tab ${isLogin ? 'active' : ''}`} onClick={() => { setIsLogin(true); setError(''); setSuccess(''); }}>
-                            Sign in
-                        </button>
-                        <button className={`auth-tab ${!isLogin ? 'active' : ''}`} onClick={() => { setIsLogin(false); setError(''); setSuccess(''); }}>
-                            Sign up
-                        </button>
-                    </div>
-
-                    {error && <div className="error-msg">{error}</div>}
-                    {success && <div className="success-msg">{success}</div>}
-
-                    <form onSubmit={handleSubmit}>
-                        {!isLogin && (
-                            <>
-                                <div className="field-group">
-                                    <label className="field-label">Full Name</label>
-                                    <input
-                                        className="field-input"
-                                        type="text"
-                                        placeholder="Your name"
-                                        required
-                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    />
-                                </div>
-                                <div className="field-group">
-                                    <label className="field-label">I am a</label>
-                                    <select
-                                        className="field-select"
-                                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                                    >
-                                        <option value="freelancer">Freelancer</option>
-                                        <option value="client">Client</option>
-                                    </select>
-                                </div>
-                            </>
-                        )}
-
-                        <div className="field-group">
-                            <label className="field-label">Email</label>
-                            <input
-                                className="field-input"
-                                type="email"
-                                placeholder="you@example.com"
-                                required
-                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            />
-                        </div>
-
-                        <div className="field-group">
-                            <label className="field-label">Password</label>
-                            <input
-                                className="field-input"
-                                type="password"
-                                placeholder="••••••••"
-                                required
-                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                            />
-                        </div>
-
-                        <button className="submit-btn" type="submit" disabled={loading}>
-                            {loading ? 'Please wait...' : isLogin ? 'Sign in' : 'Create account'}
-                        </button>
-                    </form>
-
-                    <div className="divider">
-                        <div className="divider-line" />
-                        <span className="divider-text">or</span>
-                        <div className="divider-line" />
-                    </div>
-
-                    <button className="google-btn" onClick={handleGoogleLogin}>
-                        <img
-                            src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg"
-                            alt="Google"
-                            style={{ width: '16px', height: '16px' }}
-                        />
-                        Continue with Google
+                <div className="flex bg-dark-800/50 p-1 rounded-xl mb-8 border border-white/5">
+                    <button 
+                        className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-standard ${isLogin ? 'bg-dark-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                        onClick={() => { setIsLogin(true); setError(''); setSuccess(''); }}
+                    >
+                        Sign in
+                    </button>
+                    <button 
+                        className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-standard ${!isLogin ? 'bg-dark-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                        onClick={() => { setIsLogin(false); setError(''); setSuccess(''); }}
+                    >
+                        Sign up
                     </button>
                 </div>
+
+                {error && (
+                    <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs animate-in fade-in slide-in-from-top-2 duration-300">
+                        {error}
+                    </div>
+                )}
+                {success && (
+                    <div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs animate-in fade-in slide-in-from-top-2 duration-300">
+                        {success}
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-5">
+                    {!isLogin && (
+                        <div className="space-y-5">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Full Name</label>
+                                <input
+                                    className="w-full bg-dark-800/50 border border-white/5 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-accent-500/50 focus:ring-4 focus:ring-accent-500/10 transition-standard"
+                                    type="text"
+                                    placeholder="Jane Doe"
+                                    required
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Identity</label>
+                                <select
+                                    className="w-full bg-dark-800/50 border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-accent-500/50 transition-standard"
+                                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                                >
+                                    <option value="freelancer">Freelancer</option>
+                                    <option value="client">Client</option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Email Address</label>
+                        <input
+                            className="w-full bg-dark-800/50 border border-white/5 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-accent-500/50 focus:ring-4 focus:ring-accent-500/10 transition-standard"
+                            type="email"
+                            placeholder="jane@example.com"
+                            required
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Password</label>
+                        <input
+                            className="w-full bg-dark-800/50 border border-white/5 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-accent-500/50 focus:ring-4 focus:ring-accent-500/10 transition-standard"
+                            type="password"
+                            placeholder="••••••••"
+                            required
+                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        />
+                    </div>
+
+                    <button 
+                        className="w-full py-4 bg-accent-500 hover:bg-accent-600 text-white rounded-xl font-semibold text-sm shadow-xl shadow-accent-500/20 active:scale-[0.98] transition-standard disabled:opacity-50 mt-4" 
+                        type="submit" 
+                        disabled={loading}
+                    >
+                        {loading ? 'Please wait...' : isLogin ? 'Sign in' : 'Create account'}
+                    </button>
+                </form>
+
+                <div className="flex items-center gap-4 my-8">
+                    <div className="flex-1 h-px bg-white/5" />
+                    <span className="text-xs text-slate-600 uppercase tracking-widest font-medium">Or</span>
+                    <div className="flex-1 h-px bg-white/5" />
+                </div>
+
+                <button 
+                    className="w-full py-3 bg-white/5 border border-white/5 hover:bg-white/10 text-slate-200 rounded-xl font-medium text-sm flex items-center justify-center gap-3 active:scale-[0.98] transition-standard"
+                    onClick={handleGoogleLogin}
+                >
+                    <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" className="w-5 h-5 pointer-events-none" />
+                    <span>Continue with Google</span>
+                </button>
             </div>
-        </>
+        </div>
     );
 };
 

@@ -9,7 +9,7 @@ router.get('/:freelancerId', async (req, res) => {
     try {
         const { freelancerId } = req.params;
         const [rows] = await pool.query(
-            'SELECT * FROM availability WHERE freelancer_id = ? ORDER BY booking_date, start_time',
+            "SELECT id, freelancer_id, booking_date, day_of_week, start_time, end_time, is_booked, status FROM availability WHERE freelancer_id = ? AND status IN ('available', 'pending') ORDER BY booking_date, start_time",
             [freelancerId]
         );
         res.json(rows);
@@ -18,10 +18,38 @@ router.get('/:freelancerId', async (req, res) => {
     }
 });
 
-// 2. GET: Stats for earnings dashboard
-router.get('/stats/:freelancerId', auth, async (req, res) => {
+// 2. GET: Financials for freelancer (total confirmed hours * hourly rate)
+router.get('/financials', auth, async (req, res) => {
     try {
-        const { freelancerId } = req.params;
+        if (req.user.role !== 'freelancer') {
+            return res.status(403).json({ error: "Only freelancers can access financials." });
+        }
+        
+        const [userRow] = await pool.query('SELECT hourly_rate FROM users WHERE id = ?', [req.user.id]);
+        const hourlyRate = userRow[0]?.hourly_rate || 0.00;
+
+        const [hoursRow] = await pool.query(`
+            SELECT SUM(TIMESTAMPDIFF(MINUTE, start_time, end_time)) / 60 as total_hours
+            FROM availability
+            WHERE freelancer_id = ? AND status = 'confirmed'
+        `, [req.user.id]);
+
+        const totalHours = hoursRow[0]?.total_hours || 0;
+        const totalEarnings = totalHours * hourlyRate;
+
+        res.json({ totalHours, hourlyRate, totalEarnings });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 3. GET: Stats for earnings dashboard
+router.get('/stats', auth, async (req, res) => {
+    try {
+        if (req.user.role !== 'freelancer') {
+            return res.status(403).json({ error: "Only freelancers can access stats." });
+        }
+        const freelancerId = req.user.id;
 
         // Total slots and booked this month
         const [monthStats] = await pool.query(
@@ -95,7 +123,9 @@ router.get('/stats/:freelancerId', auth, async (req, res) => {
 // 3. POST: Add a new availability slot (Protected)
 router.post('/', auth, async (req, res) => {
     try {
-        const { booking_date, day_of_week, start_time, end_time } = req.body;
+        // --- UPDATED: Extract timezone from req.body ---
+        const { booking_date, day_of_week, start_time, end_time, timezone } = req.body;
+        const activeTimezone = timezone || 'UTC'; // Fallback if frontend forgets to send it
         const freelancer_id = req.user.id;
 
         if (req.user.role !== 'freelancer') {
@@ -136,13 +166,16 @@ router.post('/', auth, async (req, res) => {
 
             const fmt = (t) => { const s = t.trim(); return s.split(':').length === 2 ? `${s}:00` : s; };
 
+            // --- UPDATED: Clean the date and apply dynamic timezone ---
+            const cleanDate = booking_date.split('T')[0];
+
             const calEvent = await calendar.events.insert({
                 calendarId: 'primary',
                 resource: {
                     summary: `Available: ${day_of_week}`,
                     description: `Slot managed by FreelanceOS`,
-                    start: { dateTime: `${booking_date}T${fmt(start_time)}`, timeZone: 'Asia/Kolkata' },
-                    end: { dateTime: `${booking_date}T${fmt(end_time)}`, timeZone: 'Asia/Kolkata' },
+                    start: { dateTime: `${cleanDate}T${fmt(start_time)}`, timeZone: activeTimezone },
+                    end: { dateTime: `${cleanDate}T${fmt(end_time)}`, timeZone: activeTimezone },
                 },
             });
             // Store the Google Calendar event ID for later deletion
@@ -259,3 +292,4 @@ router.post('/bulk', auth, async (req, res) => {
 });
 
 module.exports = router;
+
