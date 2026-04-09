@@ -79,8 +79,12 @@ router.get('/google/callback', async (req, res) => {
         // Generate our app's JWT
         const appToken = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-        // Redirect back to frontend with the token in the URL
-        res.redirect(`${FRONTEND_URL}/auth?token=${appToken}&user=${JSON.stringify({ id: user.id, name: user.name, role: user.role })}`);
+        // Redirect back to frontend with URL-safe query params
+        const authParams = new URLSearchParams({
+            token: appToken,
+            user: JSON.stringify({ id: user.id, name: user.name, role: user.role })
+        });
+        res.redirect(`${FRONTEND_URL}/auth?${authParams.toString()}`);
         
     } catch (error) {
         console.error("Detailed Google Auth Error:", error);
