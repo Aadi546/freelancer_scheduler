@@ -22,7 +22,24 @@ const BookingPage = () => {
                 ]);
                 setFreelancer(profRes.data);
                 // Only show slots that are NOT booked and NOT status 'pending'/'confirmed'
-                setAvailability((avRes.data || []).filter(s => !s.is_booked && (s.status === 'available' || !s.status)));
+                const now = new Date();
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+                setAvailability((avRes.data || []).filter(s => {
+                    const isAvailable = !s.is_booked && (s.status === 'available' || !s.status);
+                    if (!isAvailable) return false;
+
+                    const bDate = new Date(s.booking_date);
+                    const bDay = new Date(bDate.getFullYear(), bDate.getMonth(), bDate.getDate());
+
+                    if (bDay > today) return true;
+                    if (bDay < today) return false;
+
+                    // It's today! Check end_time
+                    const [h, m] = (s.end_time || "00:00:00").split(':').map(Number);
+                    const sessionEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+                    return sessionEnd > now;
+                }));
             } catch {
                 setError('Unable to load availability. Please try refreshing.');
             } finally {

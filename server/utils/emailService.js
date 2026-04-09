@@ -1,35 +1,72 @@
 const nodemailer = require('nodemailer');
 const ics = require('ics');
+const { google } = require('googleapis');
+const pool = require('../config/db');
 
-let cachedTransporter = null;
-let cachedEmailUser = null;
+let etherealTransporter = null;
+let etherealUser = null;
 
-async function getTransporter() {
-    if (cachedTransporter) return { transporter: cachedTransporter, user: cachedEmailUser };
+async function getEtherealTransporter() {
+    if (etherealTransporter) return { transporter: etherealTransporter, user: etherealUser };
+    console.log('⚠️  No freelancer OAuth token found — using Ethereal test account (emails not delivered to real inboxes).');
+    const testAccount = await nodemailer.createTestAccount();
+    etherealTransporter = nodemailer.createTransport({
+        host: 'smtp.ethereal.email',
+        port: 587,
+        secure: false,
+        auth: { user: testAccount.user, pass: testAccount.pass },
+    });
+    etherealUser = testAccount.user;
+    console.log(`✉️  Ethereal test account ready: ${testAccount.user}`);
+    return { transporter: etherealTransporter, user: etherealUser };
+}
 
-    if (process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.EMAIL_HOST) {
-        cachedTransporter = nodemailer.createTransport({
-            host: process.env.EMAIL_HOST,
-            port: parseInt(process.env.EMAIL_PORT || '587'),
-            secure: false,
-            auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-        });
-        cachedEmailUser = process.env.EMAIL_USER;
-    } else {
-        console.log('✉️  No SMTP set up in .env. Creating an Ethereal Testing Account...');
-        const testAccount = await nodemailer.createTestAccount();
-        cachedTransporter = nodemailer.createTransport({
-            host: "smtp.ethereal.email",
-            port: 587,
-            secure: false,
-            auth: {
-                user: testAccount.user,
-                pass: testAccount.pass,
-            },
-        });
-        cachedEmailUser = testAccount.user;
+/**
+ * Create a Gmail OAuth2 transporter using the freelancer's stored refresh token.
+ * If the token is missing or invalid, falls back to Ethereal.
+ */
+async function getFreelancerTransporter(freelancerEmail) {
+    if (!freelancerEmail) {
+        const { transporter, user } = await getEtherealTransporter();
+        return { transporter, fromAddress: user, isOAuth: false };
     }
-    return { transporter: cachedTransporter, user: cachedEmailUser };
+
+    // Query the database for the freelancer's refresh token
+    const [users] = await pool.query('SELECT google_refresh_token FROM users WHERE email = ?', [freelancerEmail]);
+    const refreshToken = users[0]?.google_refresh_token;
+
+    if (refreshToken && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+        try {
+            const oauth2Client = new google.auth.OAuth2(
+                process.env.GOOGLE_CLIENT_ID,
+                process.env.GOOGLE_CLIENT_SECRET,
+                process.env.GOOGLE_REDIRECT_URI
+            );
+            oauth2Client.setCredentials({ refresh_token: refreshToken });
+            const { token: accessToken } = await oauth2Client.getAccessToken();
+
+            const transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    type: 'OAuth2',
+                    user: freelancerEmail,
+                    clientId: process.env.GOOGLE_CLIENT_ID,
+                    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+                    refreshToken,
+                    accessToken,
+                },
+            });
+
+            console.log(`✉️  Sending email directly via freelancer Gmail: ${freelancerEmail}`);
+            // Use the freelancer's exact email address as the 'from' field
+            return { transporter, fromAddress: `"${freelancerEmail}" <${freelancerEmail}>`, isOAuth: true };
+        } catch (err) {
+            console.warn(`⚠️  Freelancer OAuth failed for ${freelancerEmail}, falling back to Ethereal:`, err.message);
+        }
+    }
+    // Fallback: Ethereal test account
+    const { transporter, user } = await getEtherealTransporter();
+    return { transporter, fromAddress: user, isOAuth: false };
 }
 
 /**
@@ -37,7 +74,7 @@ async function getTransporter() {
  * and a notification to the freelancer.
  */
 async function sendBookingEmails({ freelancerEmail, freelancerName, clientName, clientEmail, bookingDate, startTime, endTime }) {
-    const { transporter, user } = await getTransporter();
+    const { transporter, fromAddress, isOAuth } = await getFreelancerTransporter(freelancerEmail);
 
     const slotLabel = `${bookingDate} from ${startTime} to ${endTime}`;
 
@@ -52,7 +89,7 @@ async function sendBookingEmails({ freelancerEmail, freelancerName, clientName, 
         title: `Session with ${freelancerName}`,
         description: `Booking confirmed via FreelanceOS`,
         status: 'CONFIRMED',
-        organizer: { name: freelancerName, email: freelancerEmail || process.env.EMAIL_USER },
+        organizer: { name: freelancerName, email: isOAuth ? freelancerEmail : fromAddress },
         attendees: [
             { name: clientName, email: clientEmail, rsvp: true, partstat: 'ACCEPTED', role: 'REQ-PARTICIPANT' }
         ]
@@ -75,9 +112,10 @@ async function sendBookingEmails({ freelancerEmail, freelancerName, clientName, 
 
     // 1. Confirmation to the client
     const info1 = await transporter.sendMail({
-        from: process.env.EMAIL_FROM || user,
+        from: fromAddress,
+        replyTo: freelancerEmail || fromAddress,
         to: clientEmail,
-        subject: '✅ Booking Confirmed — FreelanceOS',
+        subject: `✅ Booking Confirmed — ${freelancerName}`,
         html: `
             <div style="font-family:'Helvetica Neue',sans-serif;background:#0d0e11;color:#e8eaf0;padding:32px;border-radius:12px;max-width:480px;margin:auto">
                 <h2 style="color:#6c8fff;margin-bottom:4px">Booking Confirmed!</h2>
@@ -94,14 +132,14 @@ async function sendBookingEmails({ freelancerEmail, freelancerName, clientName, 
         `,
         attachments
     });
-    console.log('Client Email Preview: %s', nodemailer.getTestMessageUrl(info1));
+    console.log('📧 Client Email Preview URL:', nodemailer.getTestMessageUrl(info1) || '(real email sent)');
 
-    // 2. Notification to the freelancer
+    // 2. Notification to the freelancer (Internal, but sent from their own Gmail to themselves)
     if (freelancerEmail) {
         const info2 = await transporter.sendMail({
-            from: process.env.EMAIL_FROM || user,
+            from: fromAddress,
             to: freelancerEmail,
-            subject: `📅 New booking from ${clientName} — FreelanceOS`,
+            subject: `📅 New confirmed booking from ${clientName}`,
             html: `
                 <div style="font-family:'Helvetica Neue',sans-serif;background:#0d0e11;color:#e8eaf0;padding:32px;border-radius:12px;max-width:480px;margin:auto">
                     <h2 style="color:#3ecf8e;margin-bottom:4px">New Booking!</h2>
@@ -120,22 +158,23 @@ async function sendBookingEmails({ freelancerEmail, freelancerName, clientName, 
             `,
             attachments
         });
-        console.log('Freelancer Email Preview: %s', nodemailer.getTestMessageUrl(info2));
+        console.log('📧 Freelancer Email Preview URL:', nodemailer.getTestMessageUrl(info2) || '(real email sent)');
     }
 }
 
 /**
  * Send an email to the client when the freelancer rejects a booking with a reason.
  */
-async function sendRejectionEmail({ clientEmail, clientName, freelancerName, bookingDate, startTime, endTime, reason }) {
-    const { transporter, user } = await getTransporter();
+async function sendRejectionEmail({ clientEmail, clientName, freelancerName, freelancerEmail, bookingDate, startTime, endTime, reason }) {
+    const { transporter, fromAddress } = await getFreelancerTransporter(freelancerEmail);
 
     const slotLabel = `${bookingDate} from ${startTime} to ${endTime}`;
 
     const info = await transporter.sendMail({
-        from: process.env.EMAIL_FROM || user,
+        from: fromAddress,
+        replyTo: freelancerEmail || fromAddress,
         to: clientEmail,
-        subject: `⚠️ Booking Cancelled — FreelanceOS`,
+        subject: `⚠️ Session Cancelled by ${freelancerName}`,
         html: `
             <div style="font-family:'Helvetica Neue',sans-serif;background:#0d0e11;color:#e8eaf0;padding:32px;border-radius:12px;max-width:480px;margin:auto">
                 <h2 style="color:#f06060;margin-bottom:4px">Booking Cancelled</h2>
@@ -152,14 +191,14 @@ async function sendRejectionEmail({ clientEmail, clientName, freelancerName, boo
             </div>
         `,
     });
-    console.log('Rejection Email Preview: %s', nodemailer.getTestMessageUrl(info));
+    console.log('📧 Rejection Email Preview URL:', nodemailer.getTestMessageUrl(info) || '(real email sent)');
 }
 
 /**
  * Send an email to the client when the freelancer manually schedules a slot for them.
  */
 async function sendManualBookingEmail({ freelancerEmail, freelancerName, clientName, clientEmail, bookingDate, startTime, endTime }) {
-    const { transporter, user } = await getTransporter();
+    const { transporter, fromAddress, isOAuth } = await getFreelancerTransporter(freelancerEmail);
 
     const slotLabel = `${bookingDate} from ${startTime} to ${endTime}`;
 
@@ -174,7 +213,7 @@ async function sendManualBookingEmail({ freelancerEmail, freelancerName, clientN
         title: `Session with ${freelancerName}`,
         description: `Scheduled directly by ${freelancerName}`,
         status: 'CONFIRMED',
-        organizer: { name: freelancerName, email: freelancerEmail || user },
+        organizer: { name: freelancerName, email: isOAuth ? freelancerEmail : fromAddress },
         attendees: [
             { name: clientName, email: clientEmail, rsvp: true, partstat: 'ACCEPTED', role: 'REQ-PARTICIPANT' }
         ]
@@ -190,9 +229,10 @@ async function sendManualBookingEmail({ freelancerEmail, freelancerName, clientN
     }] : [];
 
     const info = await transporter.sendMail({
-        from: process.env.EMAIL_FROM || user,
+        from: fromAddress,
+        replyTo: freelancerEmail || fromAddress,
         to: clientEmail,
-        subject: `📅 New Meeting Scheduled with ${freelancerName}`,
+        subject: `📅 ${freelancerName} scheduled a meeting with you`,
         html: `
             <div style="font-family:'Helvetica Neue',sans-serif;background:#0d0e11;color:#e8eaf0;padding:32px;border-radius:12px;max-width:480px;margin:auto">
                 <h2 style="color:#3ecf8e;margin-bottom:4px">Meeting Scheduled!</h2>
@@ -208,7 +248,42 @@ async function sendManualBookingEmail({ freelancerEmail, freelancerName, clientN
         `,
         attachments
     });
-    console.log('Manual Booking Preview: %s', nodemailer.getTestMessageUrl(info));
+    console.log('📧 Manual Booking Preview URL:', nodemailer.getTestMessageUrl(info) || '(real email sent)');
 }
 
-module.exports = { sendBookingEmails, sendRejectionEmail, sendManualBookingEmail };
+/**
+ * Notify the freelancer that a client has requested a meeting.
+ */
+async function sendRequestNotification({ freelancerEmail, freelancerName, clientName, clientEmail, bookingDate, startTime, endTime }) {
+    const { transporter, fromAddress } = await getFreelancerTransporter(freelancerEmail);
+    const slotLabel = `${bookingDate} from ${startTime} to ${endTime}`;
+
+    const info = await transporter.sendMail({
+        // Even though it's sending a notification to the freelancer themselves, it uses their own email account since we dropped central system email
+        // We set the ReplyTo field to the client, so clicking Reply in Gmail creates an email to the client directly
+        from: fromAddress,
+        replyTo: clientEmail || fromAddress,
+        to: freelancerEmail,
+        subject: `🔔 New Meeting Request from ${clientName}`,
+        html: `
+            <div style="font-family:'Helvetica Neue',sans-serif;background:#0d0e11;color:#e8eaf0;padding:32px;border-radius:12px;max-width:480px;margin:auto">
+                <h2 style="color:#6c8fff;margin-bottom:4px">New Request!</h2>
+                <p style="color:#8b90a0;margin-bottom:24px">Hi <strong style="color:#e8eaf0">${freelancerName}</strong>,</p>
+                <div style="background:#13151a;border:1px solid #2a2e38;border-radius:10px;padding:16px;margin-bottom:20px">
+                    <div style="font-size:12px;color:#555b6e;margin-bottom:4px">CLIENT</div>
+                    <div style="font-size:15px;font-weight:600;color:#e8eaf0">${clientName}</div>
+                    <div style="font-size:13px;color:#8b90a0">${clientEmail}</div>
+                    <div style="font-size:12px;color:#555b6e;margin-top:12px;margin-bottom:4px">PROPOSED SLOT</div>
+                    <div style="font-size:15px;font-weight:600;color:#e8eaf0">${slotLabel}</div>
+                </div>
+                <p style="color:#8b90a0;font-size:13px">Head to your dashboard to Approve or Decline this request.</p>
+                <p style="color:#8b90a0;font-size:13px;margin-top:10px;">Reply to this email to contact the client directly.</p>
+                <hr style="border-color:#2a2e38;margin:24px 0"/>
+                <p style="color:#3a3f4d;font-size:11px">FreelanceOS — Scheduling made simple</p>
+            </div>
+        `
+    });
+    console.log('📧 Request Notification Preview URL:', nodemailer.getTestMessageUrl(info) || '(real email sent)');
+}
+
+module.exports = { sendBookingEmails, sendRejectionEmail, sendManualBookingEmail, sendRequestNotification };

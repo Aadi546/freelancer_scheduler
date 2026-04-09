@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchMe, updateProfile } from '../api';
+import { applyTheme, getSavedTheme } from '../utils/theme';
 
 const ProfileSettings = () => {
     const [loading, setLoading] = useState(true);
@@ -23,8 +24,10 @@ const ProfileSettings = () => {
                 const { data } = await fetchMe();
                 setProfile({
                     ...data,
-                    skills: data.skills || []
+                    skills: data.skills || [],
+                    theme_preference: data.theme_preference || getSavedTheme()
                 });
+                applyTheme(data.theme_preference || getSavedTheme());
             } catch (err) {
                 setMsg({ type: 'error', text: 'Failed to load profile.' });
             } finally {
@@ -41,9 +44,10 @@ const ProfileSettings = () => {
         try {
             await updateProfile(profile);
             setMsg({ type: 'success', text: 'Profile updated successfully!' });
-            // Update local storage user name if it changed
-            const localUser = JSON.parse(localStorage.getItem('user'));
-            localStorage.setItem('user', JSON.stringify({ ...localUser, name: profile.name }));
+            applyTheme(profile.theme_preference || 'dark');
+            // Update sessionStorage user name if it changed
+            const localUser = JSON.parse(sessionStorage.getItem('user'));
+            sessionStorage.setItem('user', JSON.stringify({ ...localUser, name: profile.name, theme_preference: profile.theme_preference || 'dark' }));
         } catch (err) {
             setMsg({ type: 'error', text: 'Failed to update profile.' });
         } finally {
@@ -215,6 +219,26 @@ const ProfileSettings = () => {
                                             />
                                         </div>
                                     )}
+                                </div>
+                            </section>
+
+                            <section className="pt-8 border-t border-white/5">
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6">Appearance</h3>
+                                <div className="space-y-2 max-w-sm">
+                                    <label className="text-xs font-semibold text-slate-400 ml-1">Theme</label>
+                                    <select
+                                        className="w-full bg-dark-800/50 border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-accent-500/50 transition-standard"
+                                        value={profile.theme_preference || 'dark'}
+                                        onChange={(e) => {
+                                            const next = e.target.value === 'light' ? 'light' : 'dark';
+                                            setProfile({ ...profile, theme_preference: next });
+                                            applyTheme(next);
+                                        }}
+                                    >
+                                        <option value="dark">Dark</option>
+                                        <option value="light">Light</option>
+                                    </select>
+                                    <p className="text-xs text-slate-500">Theme applies immediately and is saved to your account.</p>
                                 </div>
                             </section>
 

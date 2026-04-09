@@ -18,115 +18,19 @@ router.get('/:freelancerId', async (req, res) => {
     }
 });
 
-// 2. GET: Financials for freelancer (total confirmed hours * hourly rate)
-router.get('/financials', auth, async (req, res) => {
-    try {
-        if (req.user.role !== 'freelancer') {
-            return res.status(403).json({ error: "Only freelancers can access financials." });
-        }
-        
-        const [userRow] = await pool.query('SELECT hourly_rate FROM users WHERE id = ?', [req.user.id]);
-        const hourlyRate = userRow[0]?.hourly_rate || 0.00;
-
-        const [hoursRow] = await pool.query(`
-            SELECT SUM(TIMESTAMPDIFF(MINUTE, start_time, end_time)) / 60 as total_hours
-            FROM availability
-            WHERE freelancer_id = ? AND status = 'confirmed'
-        `, [req.user.id]);
-
-        const totalHours = hoursRow[0]?.total_hours || 0;
-        const totalEarnings = totalHours * hourlyRate;
-
-        res.json({ totalHours, hourlyRate, totalEarnings });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 3. GET: Stats for earnings dashboard
-router.get('/stats', auth, async (req, res) => {
-    try {
-        if (req.user.role !== 'freelancer') {
-            return res.status(403).json({ error: "Only freelancers can access stats." });
-        }
-        const freelancerId = req.user.id;
-
-        // Total slots and booked this month
-        const [monthStats] = await pool.query(
-            `SELECT 
-                COUNT(*) as total_slots,
-                SUM(is_booked) as booked_slots,
-                SUM(CASE WHEN MONTH(booking_date) = MONTH(CURDATE()) AND YEAR(booking_date) = YEAR(CURDATE()) THEN 1 ELSE 0 END) as this_month_slots,
-                SUM(CASE WHEN MONTH(booking_date) = MONTH(CURDATE()) AND YEAR(booking_date) = YEAR(CURDATE()) AND is_booked = TRUE THEN 1 ELSE 0 END) as this_month_booked
-             FROM availability 
-             WHERE freelancer_id = ?`,
-            [freelancerId]
-        );
-
-        // Bookings grouped by month
-        const [monthlyBookings] = await pool.query(
-            `SELECT 
-                MONTH(booking_date) as month,
-                MONTHNAME(booking_date) as month_name,
-                COUNT(*) as booking_count,
-                SUM(TIMESTAMPDIFF(HOUR, start_time, end_time)) as total_hours
-             FROM availability
-             WHERE freelancer_id = ? AND is_booked = TRUE AND YEAR(booking_date) = YEAR(CURDATE())
-             GROUP BY MONTH(booking_date), MONTHNAME(booking_date)
-             ORDER BY month`,
-            [freelancerId]
-        );
-
-        // Conflict detection
-        const [allSlots] = await pool.query(
-            `SELECT * FROM availability WHERE freelancer_id = ? ORDER BY booking_date, start_time`,
-            [freelancerId]
-        );
-
-        const conflicts = [];
-        for (let i = 0; i < allSlots.length; i++) {
-            for (let j = i + 1; j < allSlots.length; j++) {
-                const a = allSlots[i], b = allSlots[j];
-                const aDate = a.booking_date?.toString().split('T')[0];
-                const bDate = b.booking_date?.toString().split('T')[0];
-                if (aDate !== bDate) continue;
-                if (a.start_time < b.end_time && a.end_time > b.start_time) {
-                    conflicts.push({ slot1: a, slot2: b });
-                }
-            }
-        }
-
-        // This week hours
-        const [weekStats] = await pool.query(
-            `SELECT SUM(TIMESTAMPDIFF(HOUR, start_time, end_time)) as week_hours
-             FROM availability
-             WHERE freelancer_id = ?
-               AND YEARWEEK(booking_date, 1) = YEARWEEK(CURDATE(), 1)`,
-            [freelancerId]
-        );
-
-        // Fetch freelancer's taking-bookings status
-        const [userRow] = await pool.query('SELECT is_taking_bookings FROM users WHERE id = ?', [freelancerId]);
-
-        res.json({
-            monthStats: monthStats[0],
-            monthlyBookings,
-            conflicts,
-            weekHours: weekStats[0]?.week_hours || 0,
-            is_taking_bookings: userRow[0]?.is_taking_bookings ?? true
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
 
 // 3. POST: Add a new availability slot (Protected)
 router.post('/', auth, async (req, res) => {
     try {
-        // --- UPDATED: Extract timezone from req.body ---
+        // Extract timezone from req.body
         const { booking_date, day_of_week, start_time, end_time, timezone } = req.body;
         const activeTimezone = timezone || 'UTC'; // Fallback if frontend forgets to send it
         const freelancer_id = req.user.id;
+
+        // Auto-derive day_of_week from booking_date if not provided (prevents NULL)
+        const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const dateObj = new Date(booking_date + 'T00:00:00');
+        const derivedDayOfWeek = day_of_week || days[dateObj.getDay()];
 
         if (req.user.role !== 'freelancer') {
             return res.status(403).json({ error: "Only freelancers can add availability." });
@@ -148,7 +52,7 @@ router.post('/', auth, async (req, res) => {
 
         const [result] = await pool.query(
             'INSERT INTO availability (freelancer_id, booking_date, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)',
-            [freelancer_id, booking_date, day_of_week, start_time, end_time]
+            [freelancer_id, booking_date, derivedDayOfWeek, start_time, end_time]
         );
 
         // Google Calendar sync
@@ -166,13 +70,13 @@ router.post('/', auth, async (req, res) => {
 
             const fmt = (t) => { const s = t.trim(); return s.split(':').length === 2 ? `${s}:00` : s; };
 
-            // --- UPDATED: Clean the date and apply dynamic timezone ---
+            // Clean the date and apply dynamic timezone
             const cleanDate = booking_date.split('T')[0];
 
             const calEvent = await calendar.events.insert({
                 calendarId: 'primary',
                 resource: {
-                    summary: `Available: ${day_of_week}`,
+                    summary: `Available: ${derivedDayOfWeek}`,
                     description: `Slot managed by FreelanceOS`,
                     start: { dateTime: `${cleanDate}T${fmt(start_time)}`, timeZone: activeTimezone },
                     end: { dateTime: `${cleanDate}T${fmt(end_time)}`, timeZone: activeTimezone },

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loginUser, registerUser } from '../api';
+import { loginUser, registerUser, API_BASE_URL } from '../api';
 
 const Auth = () => {
     const navigate = useNavigate();
@@ -25,8 +25,8 @@ const Auth = () => {
 
         if (token && userJson) {
             try {
-                localStorage.setItem('token', token);
-                localStorage.setItem('user', userJson);
+                sessionStorage.setItem('token', token);
+                sessionStorage.setItem('user', userJson);
                 const user = JSON.parse(userJson);
                 navigate(user.role === 'freelancer' ? '/freelancer' : '/client');
             } catch {
@@ -43,8 +43,8 @@ const Auth = () => {
         try {
             if (isLogin) {
                 const { data } = await loginUser({ email: formData.email, password: formData.password });
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('user', JSON.stringify(data.user));
+                sessionStorage.setItem('token', data.token);
+                sessionStorage.setItem('user', JSON.stringify(data.user));
                 navigate(data.user.role === 'freelancer' ? '/freelancer' : '/client');
             } else {
                 await registerUser(formData);
@@ -59,7 +59,7 @@ const Auth = () => {
     };
 
     const handleGoogleLogin = () => {
-        window.location.href = `http://localhost:5000/api/auth/google?role=${formData.role}`;
+        window.location.href = `${API_BASE_URL}/auth/google?role=${formData.role}`;
     };
 
     return (

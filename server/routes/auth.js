@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const { google } = require('googleapis');
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // Configure the Google OAuth2 client
 const oauth2Client = new google.auth.OAuth2(
@@ -23,7 +24,8 @@ router.get('/google', (req, res) => {
         scope: [
             'https://www.googleapis.com/auth/userinfo.profile',
             'https://www.googleapis.com/auth/userinfo.email',
-            'https://www.googleapis.com/auth/calendar.events'
+            'https://www.googleapis.com/auth/calendar.events',
+            'https://www.googleapis.com/auth/gmail.send'
         ],
         state: requestedRole // 🌟 Google will hold this and pass it back to us
     });
@@ -75,11 +77,11 @@ router.get('/google/callback', async (req, res) => {
         const appToken = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
         // Redirect back to frontend with the token in the URL
-        res.redirect(`http://localhost:5173/auth?token=${appToken}&user=${JSON.stringify({ id: user.id, name: user.name, role: user.role })}`);
+        res.redirect(`${FRONTEND_URL}/auth?token=${appToken}&user=${JSON.stringify({ id: user.id, name: user.name, role: user.role })}`);
         
     } catch (error) {
         console.error("Detailed Google Auth Error:", error);
-        res.redirect('http://localhost:5173/auth?error=auth_failed');
+        res.redirect(`${FRONTEND_URL}/auth?error=auth_failed`);
     }
 });
 // 1. REGISTER a new user

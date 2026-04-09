@@ -22,6 +22,6 @@ module.exports = function (req, res, next) {
         // 5. Move on to the actual route handler
         next(); 
     } catch (error) {
-        res.status(400).json({ error: "Invalid token." });
+        res.status(401).json({ error: "Invalid or expired token. Please log in again." });
     }
 };

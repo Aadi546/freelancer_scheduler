@@ -59,6 +59,12 @@ router.patch('/profile', auth, async (req, res) => {
         
         allowedFields.forEach(field => {
             if (req.body[field] !== undefined) {
+                if (field === 'theme_preference') {
+                    const normalized = req.body[field] === 'light' ? 'light' : 'dark';
+                    fields.push(`${field} = ?`);
+                    values.push(normalized);
+                    return;
+                }
                 fields.push(`${field} = ?`);
                 values.push(req.body[field]);
             }
