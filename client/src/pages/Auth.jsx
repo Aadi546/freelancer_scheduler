@@ -17,9 +17,10 @@ const Auth = () => {
         const token = params.get('token');
         const userJson = params.get('user');
         const errorParam = params.get('error');
+        const reasonParam = params.get('reason');
 
         if (errorParam) {
-            setError('Google authentication failed. Please try again.');
+            setError(reasonParam ? `Google authentication failed: ${reasonParam}` : 'Google authentication failed. Please try again.');
             return;
         }
 

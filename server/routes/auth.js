@@ -88,7 +88,17 @@ router.get('/google/callback', async (req, res) => {
         
     } catch (error) {
         console.error("Detailed Google Auth Error:", error);
-        res.redirect(`${FRONTEND_URL}/auth?error=auth_failed`);
+        const rawReason =
+            error?.response?.data?.error_description ||
+            error?.response?.data?.error ||
+            error?.message ||
+            'auth_failed';
+        const reason = String(rawReason).slice(0, 220);
+        const errorParams = new URLSearchParams({
+            error: 'auth_failed',
+            reason
+        });
+        res.redirect(`${FRONTEND_URL}/auth?${errorParams.toString()}`);
     }
 });
 // 1. REGISTER a new user
