@@ -138,27 +138,30 @@ const FreelancerDashboard = () => {
     const handleManualBooking = async (e) => {
         e.preventDefault();
         try {
-            await manualBooking(manual);
+            const { data } = await manualBooking(manual);
             setManual({ client_name: '', client_email: '', booking_date: '', start_time: '', end_time: '' });
             loadData();
             pushToast('Manual booking sent.', 'success');
+            if (data?.warning) pushToast(data.warning, 'error');
         } catch (err) { pushToast(err.response?.data?.error || 'Manual booking failed', 'error'); }
     };
 
     const handleApprove = async (id) => {
         try {
-            await approveMeeting(id);
+            const { data } = await approveMeeting(id);
             loadData();
             pushToast('Session approved.', 'success');
+            if (data?.warning) pushToast(data.warning, 'error');
         } catch (err) { pushToast('Approval failed', 'error'); }
     };
 
     const handleDecline = async () => {
         try {
-            await declineMeeting(declineModal.id, { reason: declineModal.reason });
+            const { data } = await declineMeeting(declineModal.id, { reason: declineModal.reason });
             setDeclineModal({ open: false, id: null, reason: '' });
             loadData();
             pushToast('Session declined.', 'success');
+            if (data?.warning) pushToast(data.warning, 'error');
         } catch (err) { pushToast('Decline failed', 'error'); }
     };
 

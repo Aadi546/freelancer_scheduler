@@ -40,7 +40,10 @@ router.get('/:id/profile', async (req, res) => {
 router.get('/me', auth, async (req, res) => {
     try {
         const [rows] = await pool.query(
-            'SELECT id, name, email, role, title, bio, avatar_url, company_name, skills, theme_preference, hourly_rate, is_taking_bookings FROM users WHERE id = ?',
+            `SELECT id, name, email, role, title, bio, avatar_url, company_name, skills, theme_preference, hourly_rate, is_taking_bookings,
+                    CASE WHEN google_refresh_token IS NOT NULL AND google_refresh_token <> '' THEN TRUE ELSE FALSE END AS google_connected
+             FROM users
+             WHERE id = ?`,
             [req.user.id]
         );
         if (rows.length === 0) return res.status(404).json({ error: 'Profile not found.' });

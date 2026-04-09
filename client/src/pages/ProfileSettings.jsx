@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchMe, updateProfile } from '../api';
+import { fetchMe, updateProfile, API_BASE_URL } from '../api';
 import { applyTheme, getSavedTheme } from '../utils/theme';
 
 const ProfileSettings = () => {
@@ -240,6 +240,32 @@ const ProfileSettings = () => {
                                     </select>
                                     <p className="text-xs text-slate-500">Theme applies immediately and is saved to your account.</p>
                                 </div>
+                            </section>
+
+                            <section className="pt-8 border-t border-white/5">
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6">Email Sending</h3>
+                                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                                    <div className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest border w-fit ${
+                                        profile.google_connected
+                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                    }`}>
+                                        {profile.google_connected ? 'Connected to Google' : 'Not Connected'}
+                                    </div>
+                                    {!profile.google_connected && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const role = profile.role === 'freelancer' ? 'freelancer' : 'client';
+                                                window.location.href = `${API_BASE_URL}/auth/google?role=${role}`;
+                                            }}
+                                            className="px-5 py-2.5 bg-accent-500 hover:bg-accent-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-standard"
+                                        >
+                                            Connect Google
+                                        </button>
+                                    )}
+                                </div>
+                                <p className="text-xs text-slate-500 mt-3">Required for sending direct user-to-user emails from your own account.</p>
                             </section>
 
                             <div className="pt-8 border-t border-white/5 flex justify-end">

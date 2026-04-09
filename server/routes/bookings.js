@@ -4,6 +4,11 @@ const pool = require('../config/db');
 const auth = require('../middleware/authMiddleware');
 const { sendBookingEmails, sendRejectionEmail, sendManualBookingEmail, sendRequestNotification } = require('../utils/emailService');
 
+function formatEmailWarning(baseMessage, emailErr) {
+    const reason = emailErr?.message ? ` Reason: ${emailErr.message}` : '';
+    return `${baseMessage}${reason}`;
+}
+
 // 1. GET: Fetch all booked appointments for a freelancer (Secure, no params)
 router.get('/', auth, async (req, res) => {
     try {
@@ -95,6 +100,7 @@ router.post('/request', auth, async (req, res) => {
             [freelancer_id, booking_date, dayName, start_time, end_time, client_name, client_email]
         );
 
+        let emailWarning = null;
         // Notify freelancer
         try {
             const [freelancerRows] = await pool.query('SELECT name, email FROM users WHERE id = ?', [freelancer_id]);
@@ -110,9 +116,13 @@ router.post('/request', auth, async (req, res) => {
             });
         } catch (emailErr) {
             console.warn('Request notification failed:', emailErr.message);
+            emailWarning = formatEmailWarning(
+                'Request saved, but email notification was not sent. Sender Google auth may be expired; reconnect Google in Settings and try again.',
+                emailErr
+            );
         }
 
-        res.status(201).json({ message: "Meeting requested successfully.", id: result.insertId });
+        res.status(201).json({ message: "Meeting requested successfully.", id: result.insertId, warning: emailWarning });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -135,6 +145,7 @@ router.patch('/:id/approve', auth, async (req, res) => {
         
         const [userRows] = await pool.query('SELECT name, email FROM users WHERE id = ?', [req.user.id]);
         
+        let emailWarning = null;
         try {
             await sendBookingEmails({
                 freelancerEmail: userRows[0].email,
@@ -147,9 +158,13 @@ router.patch('/:id/approve', auth, async (req, res) => {
             });
         } catch (emailErr) {
             console.warn('Email send failed (booking still confirmed):', emailErr.message);
+            emailWarning = formatEmailWarning(
+                'Booking confirmed, but email was not sent. Sender Google auth may be expired; reconnect Google in Settings and try again.',
+                emailErr
+            );
         }
 
-        res.json({ message: "Meeting confirmed!" });
+        res.json({ message: "Meeting confirmed!", warning: emailWarning });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -172,6 +187,7 @@ router.patch('/:id/decline', auth, async (req, res) => {
             [req.params.id, req.user.id]
         );
 
+        let emailWarning = null;
         try {
             await sendRejectionEmail({
                 clientEmail: slot.client_email,
@@ -183,9 +199,15 @@ router.patch('/:id/decline', auth, async (req, res) => {
                 endTime: slot.end_time?.substring(0, 5),
                 reason: reason || 'Freelancer is unavailable at this time.'
             });
-        } catch(err) { console.warn('Rejection email failed', err); }
+        } catch(err) { 
+            console.warn('Rejection email failed', err);
+            emailWarning = formatEmailWarning(
+                'Meeting declined, but email was not sent. Sender Google auth may be expired; reconnect Google in Settings and try again.',
+                err
+            );
+        }
 
-        res.json({ message: "Meeting declined." });
+        res.json({ message: "Meeting declined.", warning: emailWarning });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -246,6 +268,7 @@ router.post('/manual', auth, async (req, res) => {
 
         const [userRows] = await pool.query('SELECT name, email FROM users WHERE id = ?', [req.user.id]);
         
+        let emailWarning = null;
         try {
             await sendManualBookingEmail({
                 freelancerEmail: userRows[0].email,
@@ -256,9 +279,15 @@ router.post('/manual', auth, async (req, res) => {
                 startTime: start_time,
                 endTime: end_time
             });
-        } catch(err) { console.warn('Manual booking email failed', err); }
+        } catch(err) { 
+            console.warn('Manual booking email failed', err);
+            emailWarning = formatEmailWarning(
+                'Booking saved, but invite email was not sent. Sender Google auth may be expired; reconnect Google in Settings and try again.',
+                err
+            );
+        }
 
-        res.status(201).json({ message: 'Manual booking saved and invite sent.' });
+        res.status(201).json({ message: 'Manual booking saved and invite sent.', warning: emailWarning });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -308,6 +337,7 @@ router.post('/', auth, async (req, res) => {
             return res.status(400).json({ error: "Sorry, this slot is already taken." });
         }
 
+        let emailWarning = null;
         // Notify freelancer of the request
         try {
             const [freelancerRows] = await pool.query('SELECT name, email FROM users WHERE id = ?', [slot.freelancer_id]);
@@ -323,9 +353,13 @@ router.post('/', auth, async (req, res) => {
             });
         } catch (emailErr) {
             console.warn('Email send failed:', emailErr.message);
+            emailWarning = formatEmailWarning(
+                'Request saved, but email notification was not sent. Sender Google auth may be expired; reconnect Google in Settings and try again.',
+                emailErr
+            );
         }
 
-        res.status(201).json({ message: "Request sent to freelancer for approval." });
+        res.status(201).json({ message: "Request sent to freelancer for approval.", warning: emailWarning });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

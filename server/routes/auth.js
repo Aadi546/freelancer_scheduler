@@ -20,12 +20,15 @@ router.get('/google', (req, res) => {
 
     const url = oauth2Client.generateAuthUrl({
         access_type: 'offline', 
-        prompt: 'consent',
+        prompt: 'consent select_account',
+        include_granted_scopes: false,
         scope: [
             'https://www.googleapis.com/auth/userinfo.profile',
             'https://www.googleapis.com/auth/userinfo.email',
             'https://www.googleapis.com/auth/calendar.events',
-            'https://www.googleapis.com/auth/gmail.send'
+            'https://www.googleapis.com/auth/gmail.send',
+            // Required for Gmail SMTP OAuth2 (used by nodemailer service:gmail)
+            'https://mail.google.com/'
         ],
         state: requestedRole // 🌟 Google will hold this and pass it back to us
     });

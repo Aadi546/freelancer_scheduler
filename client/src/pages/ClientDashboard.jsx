@@ -140,13 +140,14 @@ const ClientDashboard = () => {
     const handleConfirmRequest = async () => {
         if (!bookingSlot) return;
         try {
-            await requestMeeting({
+            const { data } = await requestMeeting({
                 freelancer_id: selectedFreelancer.id,
                 booking_date: bookingSlot.booking_date,
                 start_time: bookingSlot.start_time,
                 end_time: bookingSlot.end_time
             });
             pushToast('Meeting request sent. Awaiting freelancer approval.', 'success');
+            if (data?.warning) pushToast(data.warning, 'error');
             setSelectedFreelancer(null);
             await loadData();
         } catch (err) {
@@ -157,11 +158,12 @@ const ClientDashboard = () => {
     const handleCustomRequest = async (e) => {
         e.preventDefault();
         try {
-            await requestMeeting({
+            const { data } = await requestMeeting({
                 freelancer_id: selectedFreelancer.id,
                 ...customFormData
             });
             pushToast('Custom meeting request sent. Awaiting freelancer approval.', 'success');
+            if (data?.warning) pushToast(data.warning, 'error');
             setShowCustomModal(false);
             setSelectedFreelancer(null);
             await loadData();
@@ -172,7 +174,7 @@ const ClientDashboard = () => {
 
     const handleUseSuggestedSlot = async (slot) => {
         try {
-            await requestMeeting({
+            const { data } = await requestMeeting({
                 freelancer_id: slot.freelancer_id,
                 booking_date: slot.booking_date,
                 start_time: slot.start_time,
@@ -182,6 +184,9 @@ const ClientDashboard = () => {
                 ...prev,
                 { role: 'ai', text: `✅ Requested **${slot.freelancer_name}** on ${slot.booking_date} from ${slot.start_time} to ${slot.end_time}.` }
             ]);
+            if (data?.warning) {
+                setChatMessages(prev => [...prev, { role: 'ai', text: `⚠️ ${data.warning}` }]);
+            }
             await loadData();
         } catch (err) {
             setChatMessages(prev => [
@@ -844,8 +849,9 @@ const ClientDashboard = () => {
                             <form onSubmit={async (e) => {
                                 e.preventDefault();
                                 try {
-                                    await requestMeeting(quickBookData);
+                                    const { data } = await requestMeeting(quickBookData);
                                     pushToast('Proposal transmitted successfully.', 'success');
+                                    if (data?.warning) pushToast(data.warning, 'error');
                                     setShowQuickBook(false);
                                     await loadData();
                                 } catch (err) {

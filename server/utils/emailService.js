@@ -27,8 +27,7 @@ async function getEtherealTransporter() {
  */
 async function getFreelancerTransporter(freelancerEmail) {
     if (!freelancerEmail) {
-        const { transporter, user } = await getEtherealTransporter();
-        return { transporter, fromAddress: user, isOAuth: false };
+        throw new Error('Missing sender email. Sender must connect Google to send emails.');
     }
 
     // Query the database for the freelancer's refresh token
@@ -43,7 +42,11 @@ async function getFreelancerTransporter(freelancerEmail) {
                 process.env.GOOGLE_REDIRECT_URI
             );
             oauth2Client.setCredentials({ refresh_token: refreshToken });
-            const { token: accessToken } = await oauth2Client.getAccessToken();
+            const accessTokenResponse = await oauth2Client.getAccessToken();
+            const accessToken = accessTokenResponse?.token;
+            if (!accessToken) {
+                throw new Error('Google token exchange failed (no access token returned).');
+            }
 
             const transporter = nodemailer.createTransport({
                 service: 'gmail',
@@ -61,12 +64,16 @@ async function getFreelancerTransporter(freelancerEmail) {
             // Use the freelancer's exact email address as the 'from' field
             return { transporter, fromAddress: `"${freelancerEmail}" <${freelancerEmail}>`, isOAuth: true };
         } catch (err) {
-            console.warn(`⚠️  Freelancer OAuth failed for ${freelancerEmail}, falling back to Ethereal:`, err.message);
+            console.warn(`⚠️  Sender OAuth failed for ${freelancerEmail}:`, err.message);
+            const message = String(err?.message || '');
+            if (message.includes('invalid_grant') || message.toLowerCase().includes('invalid login') || message.includes('535')) {
+                throw new Error(`Google auth rejected for ${freelancerEmail} (token expired/revoked). Reconnect Google in Settings.`);
+            }
+            throw new Error(`Google auth setup failed for ${freelancerEmail}: ${message || 'unknown error'}`);
         }
     }
-    // Fallback: Ethereal test account
-    const { transporter, user } = await getEtherealTransporter();
-    return { transporter, fromAddress: user, isOAuth: false };
+    // No central/system fallback sender.
+    throw new Error(`Sender email auth unavailable for ${freelancerEmail}. Ask this user to reconnect Google in Settings.`);
 }
 
 /**
@@ -255,7 +262,8 @@ async function sendManualBookingEmail({ freelancerEmail, freelancerName, clientN
  * Notify the freelancer that a client has requested a meeting.
  */
 async function sendRequestNotification({ freelancerEmail, freelancerName, clientName, clientEmail, bookingDate, startTime, endTime }) {
-    const { transporter, fromAddress } = await getFreelancerTransporter(freelancerEmail);
+    // Request notification should originate from the requesting client.
+    const { transporter, fromAddress } = await getFreelancerTransporter(clientEmail);
     const slotLabel = `${bookingDate} from ${startTime} to ${endTime}`;
 
     const info = await transporter.sendMail({
