@@ -445,6 +445,7 @@ const LandingPage = () => {
                     <div className="flex items-center gap-8">
                         <Link to="/auth" className="text-xs text-slate-500 hover:text-slate-300 transition-colors font-medium uppercase tracking-widest">Sign in</Link>
                         <Link to="/auth" className="text-xs text-slate-500 hover:text-slate-300 transition-colors font-medium uppercase tracking-widest">Sign up</Link>
+                        <Link to="/privacy" className="text-xs text-slate-500 hover:text-slate-300 transition-colors font-medium uppercase tracking-widest">Privacy</Link>
                     </div>
                     <div className="text-xs text-slate-700">
                         © {new Date().getFullYear()} ScheduleIn. All rights reserved.

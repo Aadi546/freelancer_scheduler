@@ -185,6 +185,11 @@ const Auth = () => {
                     <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" className="w-5 h-5 pointer-events-none" />
                     <span>Continue with Google</span>
                 </button>
+
+                <div className="mt-8 flex items-center justify-between text-[11px] text-slate-600">
+                    <a href="/privacy" className="hover:text-slate-400 transition-colors">Privacy Policy</a>
+                    <span className="text-slate-700">© {new Date().getFullYear()} FreelanceOS</span>
+                </div>
             </div>
         </div>
     );

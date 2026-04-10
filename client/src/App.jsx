@@ -6,6 +6,7 @@ import BookingPage from './pages/BookingPage';
 import Auth from './pages/Auth';
 import ProfileSettings from './pages/ProfileSettings';
 import LandingPage from './pages/LandingPage';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import { applyTheme, getSavedTheme } from './utils/theme';
 
 const NotFound = () => (
@@ -32,6 +33,7 @@ function App() {
         <Route path="/client" element={<ClientDashboard />} />
         <Route path="/book/:freelancerId" element={<BookingPage />} />
         <Route path="/settings" element={<ProfileSettings />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Router>
